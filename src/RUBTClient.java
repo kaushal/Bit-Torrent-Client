@@ -24,6 +24,7 @@ public class RUBTClient {
 		DataInputStream file = new DataInputStream(new FileInputStream(tf));          
 		file.readFully(byteFile);
 		file.close();
+	
 		
 		TorrentInfo ti = new TorrentInfo(byteFile);
 		
@@ -34,5 +35,13 @@ public class RUBTClient {
 			sb.append(String.format("%02X", infoHash[i]));
 		}
 		System.out.println(sb);
+		
+    //at this point ti should contain all of the necessary torrent information
+
+		Client client = new Client(args[1], ti);
+		client.download();
+
+		System.out.println(ti.info_hash);
+		
 	}
 }
