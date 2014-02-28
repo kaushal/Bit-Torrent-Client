@@ -27,7 +27,16 @@ public class RUBTClient {
 	
 		
 		TorrentInfo ti = new TorrentInfo(byteFile);
-		//at this point ti should contain all of the necessary torrent information
+		
+		byte[] infoHash = ti.info_hash.array();
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < infoHash.length; i++) {
+			sb.append("%");
+			sb.append(String.format("%02X", infoHash[i]));
+		}
+		System.out.println(sb);
+		
+    //at this point ti should contain all of the necessary torrent information
 
 		Client client = new Client(args[1], ti);
 		client.download();
