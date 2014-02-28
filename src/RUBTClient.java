@@ -32,7 +32,7 @@ public class RUBTClient {
 		Client client = new Client(args[1], ti);
 		client.download();
 
-		System.out.println(ti.info_hash);
+		System.out.println(ti.info_hash.array());
 		
 	}
 }
