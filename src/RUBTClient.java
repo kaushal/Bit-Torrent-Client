@@ -10,7 +10,6 @@ import edu.rutgers.cs.cs352.bt.exceptions.BencodingException;
 
 public class RUBTClient {
 	public static void main(String[] args) throws IOException, BencodingException{
-		System.out.println(args.length);
 		if(args.length != 2){
 			System.out.println("incorrect number of command line arguments");
 			return;
@@ -28,9 +27,12 @@ public class RUBTClient {
 		
 		TorrentInfo ti = new TorrentInfo(byteFile);
 		
-		
-		System.out.println(ti.file_length);
-		
-		
+		byte[] infoHash = ti.info_hash.array();
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < infoHash.length; i++) {
+			sb.append("%");
+			sb.append(String.format("%02X", infoHash[i]));
+		}
+		System.out.println(sb);
 	}
 }
