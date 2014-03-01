@@ -20,6 +20,10 @@ hs_err_pid*
 .settings/
 bin/
 
+# Intellij configs
+.idea/
+*.iml
+
 # User defined
 *.swp
 .DS_Store
