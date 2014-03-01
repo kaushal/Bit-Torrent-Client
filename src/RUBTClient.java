@@ -1,23 +1,12 @@
-import java.io.BufferedReader;
+import edu.rutgers.cs.cs352.bt.TorrentInfo;
+import edu.rutgers.cs.cs352.bt.exceptions.BencodingException;
 
-import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.nio.ByteBuffer;
-
-import edu.rutgers.cs.cs352.bt.TorrentInfo;
-import edu.rutgers.cs.cs352.bt.util.ToolKit;
-import edu.rutgers.cs.cs352.bt.exceptions.BencodingException;
 
 public class RUBTClient {
-
 
 
 	@SuppressWarnings("unchecked")
@@ -46,36 +35,10 @@ public class RUBTClient {
 		file.close();
 		TorrentInfo ti = new TorrentInfo(byteFile);
 
+        Tracker tracker = new Tracker(ti);
 
-		/*
-		 * URL Encode the infoHash
-		 */
-		byte[] infoHash = ti.info_hash.array();
-		StringBuilder sb = new StringBuilder();
-		for (int i = 0; i < infoHash.length; i++) {
-			sb.append(String.format("%%%02X", infoHash[i]));
-		}
-		
-		/*
-		 * TODO: Pull this out to tracker.java
-		 */
-		URL url = new URL(ti.announce_url.toString() + "?info_hash=" + sb + "&peer_id=" + "EKW45678901234567890" + "&port=6881&uploaded=0&downloaded=0&left=1024");
-		HttpURLConnection con = (HttpURLConnection) url.openConnection();
-		int responseCode = con.getResponseCode();
-		System.out.println("\nSending 'GET' request to URL : " + url);
-		System.out.println("Response Code : " + responseCode);
- 
-		BufferedReader is = new BufferedReader(new InputStreamReader(con.getInputStream()));
+        System.out.println(tracker.getPeers());
 
-		ByteArrayOutputStream baos = new ByteArrayOutputStream(); // Like a baos
-		int reads = is.read();
-		while (reads != -1) {
-			baos.write(reads);
-			reads = is.read();
-		}
-		is.close();
-		HashMap<String,Object> res = (HashMap<String,Object>)BencodeWrapper.decode(baos.toByteArray());
-		System.out.println(res);
 
 //		new String(((java.nio.ByteBuffer) this).array());
 //		ToolKit.print(res);
@@ -84,20 +47,5 @@ public class RUBTClient {
 		// Client client = new Client(args[1], ti);
 		// client.download();
 
-	}
-
-	/**
-	 * Converts a byte array to a hex string
-	 * 
-	 * @param ba a byte array
-	 * @return the byte array converted to a hex string
-	 */
-	public static String byteArrayToHexString(byte[] ba) {
-		StringBuilder sb = new StringBuilder();
-		for (byte i : ba) {
-			sb.append(Integer.toHexString((i >> 4) & 0xf));
-			sb.append(Integer.toHexString(i & 0xf));
-		}
-		return sb.toString();
 	}
 }
