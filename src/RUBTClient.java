@@ -2,46 +2,67 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.net.URL;
 
 import edu.rutgers.cs.cs352.bt.TorrentInfo;
 import edu.rutgers.cs.cs352.bt.exceptions.BencodingException;
 
-
-
 public class RUBTClient {
-	public static void main(String[] args) throws IOException, BencodingException{
-		if(args.length != 2){
+	public static void main(String[] args) throws IOException, BencodingException {
+
+		if (args.length != 2) {
 			System.out.println("incorrect number of command line arguments");
 			return;
 		}
-		
+
+		/*
+		 * Check if we can open the torrent file
+		 */
 		File tf = new File(args[0]);
-		if(!tf.canRead()){
+		if (!tf.canRead()) {
 			System.out.println("Can't read torrent file");
 		}
-		
+
+		/*
+		 * Read the torrent file into a byte array and create
+		 * a TorrentInfo object with it
+		 */
 		byte[] byteFile = new byte[(int) tf.length()];
-		DataInputStream file = new DataInputStream(new FileInputStream(tf));          
+		DataInputStream file = new DataInputStream(new FileInputStream(tf));
 		file.readFully(byteFile);
 		file.close();
-	
-		
 		TorrentInfo ti = new TorrentInfo(byteFile);
-		
+
+
 		byte[] infoHash = ti.info_hash.array();
 		StringBuilder sb = new StringBuilder();
 		for (int i = 0; i < infoHash.length; i++) {
 			sb.append("%");
 			sb.append(String.format("%02X", infoHash[i]));
 		}
-		System.out.println(sb);
 		
-    //at this point ti should contain all of the necessary torrent information
+		/*
+		 * TODO: Pull this out to tracker.java
+		 */
+		URL url = new URL(ti.announce_url.toString() + "?info_hash=" + sb + "&peer_id=" + "12345678901234567890");
 
-		Client client = new Client(args[1], ti);
-		client.download();
+		// Client client = new Client(args[1], ti);
+		// client.download();
 
-		System.out.println(ti.info_hash.array());
-		
+	}
+
+	/**
+	 * Converts a byte array to a hex string
+	 * 
+	 * @param ba a byte array
+	 * @return the byte array converted to a hex string
+	 */
+	public static String byteArrayToHexString(byte[] ba) {
+		StringBuilder sb = new StringBuilder();
+		for (byte i : ba) {
+			sb.append(Integer.toHexString((i >> 4) & 0xf));
+			sb.append(Integer.toHexString(i & 0xf));
+		}
+		return sb.toString();
 	}
 }
