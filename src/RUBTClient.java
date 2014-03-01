@@ -1,4 +1,6 @@
 import java.io.BufferedReader;
+import java.util.HashMap;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -8,6 +10,8 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 
 import edu.rutgers.cs.cs352.bt.TorrentInfo;
+import edu.rutgers.cs.cs352.bt.util.Bencoder2;
+import edu.rutgers.cs.cs352.bt.util.ToolKit;
 import edu.rutgers.cs.cs352.bt.exceptions.BencodingException;
 
 public class RUBTClient {
@@ -55,19 +59,19 @@ public class RUBTClient {
 		System.out.println("\nSending 'GET' request to URL : " + url);
 		System.out.println("Response Code : " + responseCode);
  
-		BufferedReader in = new BufferedReader(
-		        new InputStreamReader(con.getInputStream()));
-		String inputLine;
-		StringBuffer response = new StringBuffer();
- 
-		while ((inputLine = in.readLine()) != null) {
-			response.append(inputLine);
-		}
-		in.close();
- 
-		//print result
-		System.out.println(response.toString());
+		BufferedReader is = new BufferedReader(new InputStreamReader(con.getInputStream()));
 
+		ByteArrayOutputStream baos = new ByteArrayOutputStream(); // Like a baos
+		int reads = is.read();
+		while (reads != -1) {
+			baos.write(reads);
+			reads = is.read();
+		}
+		is.close();
+		Object res = Bencoder2.decode(baos.toByteArray());
+		ToolKit.print(res);
+
+ 
 		// Client client = new Client(args[1], ti);
 		// client.download();
 
