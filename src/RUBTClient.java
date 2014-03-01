@@ -1,5 +1,5 @@
 import java.io.BufferedReader;
-import java.util.HashMap;
+
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.File;
@@ -8,13 +8,19 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.nio.ByteBuffer;
 
 import edu.rutgers.cs.cs352.bt.TorrentInfo;
-import edu.rutgers.cs.cs352.bt.util.Bencoder2;
 import edu.rutgers.cs.cs352.bt.util.ToolKit;
 import edu.rutgers.cs.cs352.bt.exceptions.BencodingException;
 
 public class RUBTClient {
+
+
+
+	@SuppressWarnings("unchecked")
 	public static void main(String[] args) throws IOException, BencodingException {
 
 		if (args.length != 2) {
@@ -68,8 +74,11 @@ public class RUBTClient {
 			reads = is.read();
 		}
 		is.close();
-		Object res = Bencoder2.decode(baos.toByteArray());
-		ToolKit.print(res);
+		HashMap<String,Object> res = (HashMap<String,Object>)BencodeWrapper.decode(baos.toByteArray());
+		System.out.println(res);
+
+//		new String(((java.nio.ByteBuffer) this).array());
+//		ToolKit.print(res);
 
  
 		// Client client = new Client(args[1], ti);
