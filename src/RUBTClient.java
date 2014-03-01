@@ -1,7 +1,10 @@
+import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
 import java.net.URL;
 
 import edu.rutgers.cs.cs352.bt.TorrentInfo;
@@ -34,17 +37,36 @@ public class RUBTClient {
 		TorrentInfo ti = new TorrentInfo(byteFile);
 
 
+		/*
+		 * URL Encode the infoHash
+		 */
 		byte[] infoHash = ti.info_hash.array();
 		StringBuilder sb = new StringBuilder();
 		for (int i = 0; i < infoHash.length; i++) {
-			sb.append("%");
-			sb.append(String.format("%02X", infoHash[i]));
+			sb.append(String.format("%%%02X", infoHash[i]));
 		}
 		
 		/*
 		 * TODO: Pull this out to tracker.java
 		 */
-		URL url = new URL(ti.announce_url.toString() + "?info_hash=" + sb + "&peer_id=" + "12345678901234567890");
+		URL url = new URL(ti.announce_url.toString() + "?info_hash=" + sb + "&peer_id=" + "EKW45678901234567890" + "&port=6881&uploaded=0&downloaded=0&left=1024");
+		HttpURLConnection con = (HttpURLConnection) url.openConnection();
+		int responseCode = con.getResponseCode();
+		System.out.println("\nSending 'GET' request to URL : " + url);
+		System.out.println("Response Code : " + responseCode);
+ 
+		BufferedReader in = new BufferedReader(
+		        new InputStreamReader(con.getInputStream()));
+		String inputLine;
+		StringBuffer response = new StringBuffer();
+ 
+		while ((inputLine = in.readLine()) != null) {
+			response.append(inputLine);
+		}
+		in.close();
+ 
+		//print result
+		System.out.println(response.toString());
 
 		// Client client = new Client(args[1], ti);
 		// client.download();
