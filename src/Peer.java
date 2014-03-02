@@ -3,6 +3,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.util.BitSet;
 import java.util.HashMap;
 
 public class Peer implements Runnable {
@@ -22,17 +23,20 @@ public class Peer implements Runnable {
     private ByteBuffer peerId;
     private ByteBuffer handshake;
     private String state;
+	private BitSet availablePieces;
+	private Torrent owner;
 
 	private boolean running = true;
 
 	private Piece currentPiece = null;
     private Socket sock;
 
-    public Peer(HashMap<String, Object> peerInfo, ByteBuffer infoHash, ByteBuffer peerId) {
+    public Peer(HashMap<String, Object> peerInfo, Torrent owner, ByteBuffer infoHash, ByteBuffer peerId) {
         this.peerInfo = peerInfo;
         this.infoHash = infoHash.duplicate();
         this.peerId = peerId.duplicate();
         this.handshake = createHandshake();
+	    this.owner = owner;
     }
 
     @Override
@@ -47,7 +51,13 @@ public class Peer implements Runnable {
             OutputStream outStream = sock.getOutputStream();
             InputStream inputStream = sock.getInputStream();
             outStream.write(this.handshake.array());
-            inputStream.read(buffer);
+            int len = inputStream.read(buffer);
+	        boolean success = processHandshakeResponse(ByteBuffer.wrap(buffer,0,len));
+	        if (!success) {
+		        owner.peerDying(this);
+		        return;
+	        }
+
             outStream.write(INTERESTED);
 	        while (running) {
 		        if (currentPiece != null) {
@@ -74,6 +84,33 @@ public class Peer implements Runnable {
 	    running = false;
     }
 
+
+	public boolean processHandshakeResponse(ByteBuffer resp) {
+
+		if (resp.get() != 19) return false; // Not BT
+		if (((ByteBuffer)resp.slice().limit(19)).compareTo(ByteBuffer.wrap(PROTOCOL_HEADER.getBytes())) != 0) return false; // Not BT
+		resp.position(resp.position()+19+8);
+		if (((ByteBuffer)resp.slice().limit(20)).compareTo(infoHash) != 0) return false; // Wrong infohash
+		resp.position(resp.position()+20);
+		if (((ByteBuffer)resp.slice().limit(20)).compareTo(ByteBuffer.wrap(((String)peerInfo.get("peer id")).getBytes())) != 0) return false; // Wrong peerId
+		resp.position(resp.position()+20);
+		if (resp.hasRemaining()) {
+			resp.compact().flip();
+			int len = resp.getInt() - 1;
+			if (resp.get() == 5) { // We have a pieces bitfield
+				availablePieces = new BitSet(len*8);
+				byte b = 0;
+				for (int j = 0; j < len * 8; ++j) {
+					if (j % 8 == 0) b = resp.get();
+					availablePieces.set(j,((b << (j % 8)) & 0xf0) != 0);
+				}
+			}
+		}
+		if (resp.compareTo(ByteBuffer.wrap(PROTOCOL_HEADER.getBytes())) != 0) return false;
+
+
+		return true;
+	}
     /**
      * Creates the peer handshake
      *
@@ -100,7 +137,12 @@ public class Peer implements Runnable {
 
     public boolean canGetPiece(int index) {
         // TODO: Return if peer has piece
-        return true;
+	    try {
+	        return availablePieces.get(index);
+	    } catch (IndexOutOfBoundsException e) {
+		    e.printStackTrace();
+	    }
+	    return false;
     }
 
 	public void getPiece(Piece piece) {

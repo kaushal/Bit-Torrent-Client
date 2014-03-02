@@ -54,7 +54,7 @@ public class Torrent implements Runnable {
 		    ArrayList<HashMap<String,Object>> tmp_peers = getPeers();
 		    for (HashMap<String,Object> p : tmp_peers) {
 			    if (((String)p.get("peer id")).startsWith("RUBT") && p.get("ip").equals("128.6.171.130")) {
-				    Peer pr = new Peer(p,this.torrentInfo.info_hash,ByteBuffer.wrap(this.peerId.getBytes()));
+				    Peer pr = new Peer(p,this,this.torrentInfo.info_hash,ByteBuffer.wrap(this.peerId.getBytes()));
 				    freePeers.add(pr);
 			        (new Thread(pr)).start();
 			    }
@@ -126,6 +126,16 @@ public class Torrent implements Runnable {
     }
 
 
+	public void peerDying(Peer p) {
+		System.out.println("Peer "+p+" died. Sadface.");
+		synchronized (freePeers) {
+			if (freePeers.contains(p)) {
+				freePeers.remove(p);
+			} else if (busyPeers.values().contains(p)) {
+				busyPeers.values().remove(p);
+			}
+		}
+	}
 	private final Object fileLock = new Object();
 	public void putPiece(ByteBuffer pieceData, Piece piece) {
 		synchronized (fileLock) {
