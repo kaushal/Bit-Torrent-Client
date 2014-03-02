@@ -56,7 +56,7 @@ public class Peer implements Runnable {
 				        bytes[j] = (byte)(j & 0xff);
 			        }
 			        ByteBuffer bb = ByteBuffer.wrap(bytes);
-			        currentPiece.getOwner().putPiece(bb,currentPiece);
+			        currentPiece.getOwner().putPiece(bb, currentPiece);
 			        currentPiece = null;
 		        }
 		        try {

@@ -58,7 +58,7 @@ public class Torrent implements Runnable {
 			    }
 		    }
 		    dataFile = new RandomAccessFile("/Users/eddiezane/Desktop/blerghfile","rw");
-		    fileByteBuffer = dataFile.getChannel().map(FileChannel.MapMode.READ_WRITE,0, (Integer)torrentInfo.info_map.get(TorrentInfo.KEY_LENGTH));
+		    fileByteBuffer = dataFile.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, (Integer)torrentInfo.info_map.get(TorrentInfo.KEY_LENGTH));
 
 		    while (true) {
 			    synchronized (runLock) {
@@ -87,7 +87,7 @@ public class Torrent implements Runnable {
 						    busyPieces.add(piece);
 						    p.getPiece(piece);
 						    tmpPeers.add(p);
-						    busyPeers.put(piece,p);
+						    busyPeers.put(piece, p);
 					    }
 				    }
 				    for (Peer p : tmpPeers) {
@@ -97,17 +97,7 @@ public class Torrent implements Runnable {
 
 
 		    }
-		    synchronized (fileLock) {
-			    dataFile.close();
-			    fileByteBuffer = null;
-		    }
-		    for (Peer p : freePeers) {
-			    p.stop();
-		    }
-		    for (Peer p : busyPeers.values()) {
-			    p.stop();
-		    }
-		    // Done.
+
 
 	    } catch (FileNotFoundException e) {
 		    e.printStackTrace();
@@ -115,7 +105,22 @@ public class Torrent implements Runnable {
 		    e.printStackTrace();
 	    } catch (BencodingException e) {
 		    e.printStackTrace();
-	    }
+	    } finally {
+            synchronized (fileLock) {
+                try {
+                    dataFile.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                fileByteBuffer = null;
+            }
+            for (Peer p : freePeers) {
+                p.stop();
+            }
+            for (Peer p : busyPeers.values()) {
+                p.stop();
+            }
+        }
     }
 
 
@@ -124,12 +129,12 @@ public class Torrent implements Runnable {
 		synchronized (fileLock) {
 			fileByteBuffer.position(piece.getIndex() * torrentInfo.piece_length);
 			fileByteBuffer.put(pieceData);
-			synchronized (freePeers) {
-				freePeers.add(busyPeers.get(piece));
-				busyPeers.remove(piece);
-				busyPieces.remove(piece);
-			}
-		}
+        }
+        synchronized (freePeers) {
+            freePeers.add(busyPeers.get(piece));
+            busyPeers.remove(piece);
+            busyPieces.remove(piece);
+        }
 	}
 
 
@@ -137,8 +142,8 @@ public class Torrent implements Runnable {
 	private ArrayList<Piece> generatePieces() {
 		ArrayList<Piece> al = new ArrayList<Piece>();
 		int total = torrentInfo.file_length;
-		for (int i = 0; i < torrentInfo.piece_hashes.length; ++i,total -= torrentInfo.piece_length) {
-			al.add(new Piece(i,Math.min(total,torrentInfo.piece_length),torrentInfo.piece_hashes[i],this));
+		for (int i = 0; i < torrentInfo.piece_hashes.length; ++i, total -= torrentInfo.piece_length) {
+			al.add(new Piece(i, Math.min(total, torrentInfo.piece_length), torrentInfo.piece_hashes[i], this));
 		}
 		return al;
 	}
