@@ -1,4 +1,6 @@
-import java.io.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
@@ -38,15 +40,15 @@ public class Peer implements Runnable {
         // TODO: Loop dis
         // TODO: Keep alives
         // TODO: Verify talking to right client
+        byte[] buffer = new byte[1024];
         try {
-            System.out.println(peerInfo.get("ip") + " : " + peerInfo.get("port"));
+            System.out.println("Connecting to peer: " + peerInfo.get("ip") + " : " + peerInfo.get("port"));
             sock = new Socket((String)peerInfo.get("ip"), (Integer)peerInfo.get("port"));
             OutputStream outStream = sock.getOutputStream();
-            BufferedReader inputReader = new BufferedReader(new InputStreamReader(sock.getInputStream()));
+            InputStream inputStream = sock.getInputStream();
             outStream.write(this.handshake.array());
+            inputStream.read(buffer);
             outStream.write(INTERESTED);
-
-
 	        while (running) {
 		        if (currentPiece != null) {
 			        byte[] bytes = new byte[currentPiece.getSize()];

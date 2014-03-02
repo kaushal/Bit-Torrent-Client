@@ -57,9 +57,7 @@ public class Torrent implements Runnable {
 			        (new Thread(pr)).start();
 			    }
 		    }
-
-
-		    dataFile = new RandomAccessFile("/Users/wlangford/Desktop/blerghfile","rw");
+		    dataFile = new RandomAccessFile("/Users/eddiezane/Desktop/blerghfile","rw");
 		    fileByteBuffer = dataFile.getChannel().map(FileChannel.MapMode.READ_WRITE,0, (Integer)torrentInfo.info_map.get(TorrentInfo.KEY_LENGTH));
 
 		    while (true) {
@@ -184,7 +182,6 @@ public class Torrent implements Runnable {
         is.close();
         HashMap<String,Object> res = (HashMap<String,Object>)BencodeWrapper.decode(baos.toByteArray());
 	    return (ArrayList<HashMap<String,Object>>)res.get("peers");
-
     }
 
     /**
