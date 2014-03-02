@@ -39,10 +39,12 @@ public class Torrent implements Runnable {
 
     @Override
     public void run() {
+	    // TODO: Only accept the RUBT11 peers
 	    try {
 		    ArrayList<HashMap<String,Object>> tmp_peers = getPeers();
 		    for (HashMap<String,Object> p : tmp_peers) {
-			    peers.add(new Peer(p,this.torrentInfo.info_hash,ByteBuffer.wrap(this.peerId.getBytes())));
+			    if (((String)p.get("peer id")).startsWith("RUBT") && p.get("ip").equals("128.6.171.130"))
+			        peers.add(new Peer(p,this.torrentInfo.info_hash,ByteBuffer.wrap(this.peerId.getBytes())));
 		    }
 		    for (Peer p : peers) {
 			    (new Thread(p)).start();
@@ -60,9 +62,12 @@ public class Torrent implements Runnable {
     }
 
 
+	private Object pieceLock = new Object();
 	public void putPiece(ByteBuffer pieceData, int piece) {
-		fileByteBuffer.position(piece* (Integer)torrentInfo.info_map.get(TorrentInfo.KEY_PIECE_LENGTH));
-		fileByteBuffer.put(pieceData);
+		synchronized (pieceLock) {
+			fileByteBuffer.position(piece * (Integer)torrentInfo.info_map.get(TorrentInfo.KEY_PIECE_LENGTH));
+			fileByteBuffer.put(pieceData);
+		}
 	}
 
 
