@@ -34,7 +34,9 @@ public class RUBTClient {
 		file.readFully(byteFile);
 		file.close();
 		TorrentInfo ti = new TorrentInfo(byteFile);
-
+		Torrent tt = new Torrent(ti);
+		Thread thd = new Thread(tt);
+		thd.start();
 
 
 //		new String(((java.nio.ByteBuffer) this).array());

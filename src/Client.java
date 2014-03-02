@@ -11,29 +11,16 @@ public class Client {
 
 	private TorrentInfo ti;
 
-	public Client(String name, TorrentInfo ti){
+	public Client(String name, TorrentInfo ti) {
 		this.name = name;
 		this.ti = ti;
 	}
 
-	private String generateID(){
-		String finalString = "";
-		Random rg = new Random(System.currentTimeMillis() );
-		for(int i = 0; i < 20; i++){
-			finalString = finalString + (char)(rg.nextInt(26) + 65);
-		}
-		if(finalString.contains("RUBT")){
-			return generateID();
-		}
-		else
-			return finalString;
-	}
 
 
-	public void download() throws FileNotFoundException{
 
+	public void download() throws FileNotFoundException {
 		RandomAccessFile file = new RandomAccessFile(this.name, "rw");
-		String peerId = generateID();
 		StringBuilder sb = new StringBuilder(60);
 		byte[] infoHash = ti.info_hash.array();
 
