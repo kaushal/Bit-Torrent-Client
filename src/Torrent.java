@@ -11,6 +11,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Random;
 
+/**
+ * Represents a torrent object responsible for talking to peers
+ * and downloading its own pieces in threads
+ *
+ * @author eddiezane
+ * @author wlangford
+ */
 public class Torrent implements Runnable {
 
     private TorrentInfo torrentInfo;
@@ -42,12 +49,18 @@ public class Torrent implements Runnable {
 	    this.left = ti.file_length;
     }
 
+    /**
+     * Used by the RUBTClient to stop the torrent run loop
+     */
 	public void stop() {
 		synchronized (runLock) {
 			running = false;
 		}
 	}
 
+    /**
+     * TODO: Document this
+     */
     @Override
     public void run() {
 	    try {
@@ -96,11 +109,7 @@ public class Torrent implements Runnable {
 					    freePeers.remove(p);
 				    }
 			    }
-
-
 		    }
-
-
 	    } catch (FileNotFoundException e) {
 		    e.printStackTrace();
 	    } catch (IOException e) {
@@ -125,7 +134,6 @@ public class Torrent implements Runnable {
         }
     }
 
-
 	public void peerDying(Peer p) {
 		System.out.println("Peer "+p+" died. Sadface.");
 		synchronized (freePeers) {
@@ -136,7 +144,15 @@ public class Torrent implements Runnable {
 			}
 		}
 	}
+
 	private final Object fileLock = new Object();
+
+    /**
+     * Write the piece data to the piece buffer
+     *
+     * @param pieceData A bytebuffer containing data of a piece
+     * @param piece A piece object representation to be added
+     */
 	public void putPiece(ByteBuffer pieceData, Piece piece) {
 		synchronized (fileLock) {
 			fileByteBuffer.position(piece.getIndex() * torrentInfo.piece_length);
@@ -149,8 +165,12 @@ public class Torrent implements Runnable {
         }
 	}
 
-
-
+    /**
+     * Calculates and creates an arraylist of pieces to be downloaded
+     * for a given torrent
+     *
+     * @return An arraylist of pieces
+     */
 	private ArrayList<Piece> generatePieces() {
 		ArrayList<Piece> al = new ArrayList<Piece>();
 		int total = torrentInfo.file_length;
@@ -159,6 +179,12 @@ public class Torrent implements Runnable {
 		}
 		return al;
 	}
+
+    /**
+     * Generates a peer id with prefix EWOK
+     *
+     * @return A peer id as a string
+     */
 	private String generateId() {
 		StringBuilder finalString = new StringBuilder(20).append("EWOK");
 		Random rng = new Random(System.currentTimeMillis());
@@ -185,7 +211,7 @@ public class Torrent implements Runnable {
 		        "&port="+port+
 		        "&uploaded="+uploaded+
 		        "&downloaded="+downloaded+
-		        "&left="+left);
+		        "&left="+left); // TODO: Add start event
         HttpURLConnection con = (HttpURLConnection) url.openConnection();
 
         BufferedReader is = new BufferedReader(new InputStreamReader(con.getInputStream()));
@@ -199,6 +225,24 @@ public class Torrent implements Runnable {
         is.close();
         HashMap<String,Object> res = (HashMap<String,Object>)BencodeWrapper.decode(baos.toByteArray());
 	    return (ArrayList<HashMap<String,Object>>)res.get("peers");
+    }
+
+    /**
+     * Makes a get request to the tracker to let it know that
+     * we have finished downloading the torrent
+     *
+     * @throws IOException
+     */
+    public void sendCompleteEvent() throws IOException {
+        URL url = new URL(this.torrentInfo.announce_url.toString() +
+                "?info_hash=" + this.encodedInfoHash +
+                "&peer_id=" + peerId +
+                "&port="+port+
+                "&uploaded="+uploaded+
+                "&downloaded="+downloaded+
+                "&left="+left +
+                "&event=completed");
+        HttpURLConnection con = (HttpURLConnection) url.openConnection();
     }
 
     /**

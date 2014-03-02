@@ -1,5 +1,11 @@
 import java.nio.ByteBuffer;
 
+/**
+ * A representation of a piece which is owned by a torrent
+ *
+ * @author eddiezane
+ * @author wlangford
+ */
 public class Piece {
     private int index;
     private int size;
