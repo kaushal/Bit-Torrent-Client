@@ -110,6 +110,8 @@ public class Torrent implements Runnable {
         }
         is.close();
         HashMap<String,Object> res = (HashMap<String,Object>)BencodeWrapper.decode(baos.toByteArray());
+	    return (ArrayList<HashMap<String,Object>>)res.get("peers");
+
     }
 
     /**
