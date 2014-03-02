@@ -5,6 +5,13 @@ import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 
+/**
+ * A connection to a peer that is responsible for downloading
+ * a piece of a piece. Is run in a new thread.
+ *
+ * @author eddiezane
+ * @author wlangford
+ */
 public class Peer implements Runnable {
     private final String PROTOCOL_HEADER = "BitTorrent protocol";
     private final byte[] KEEP_ALIVE = new byte[]{0,0,0,0};
@@ -13,7 +20,7 @@ public class Peer implements Runnable {
     private final byte[] INTERESTED = new byte[]{0,0,0,1,2};
     private final byte[] NOT_INTERESTED = new byte[]{0,0,0,1,3};
     private final byte[] HAVE = new byte[]{0,0,0,5,4};
-    private final byte[] REQUEST = new byte[]{0,0,1,3,6};
+    private final byte[] REQUEST = new byte[]{0,0,0,13,6};
 
     private final byte[] PIECE = new byte[]{0,0,0,0}; // TODO: PIECE
 
@@ -35,11 +42,15 @@ public class Peer implements Runnable {
         this.handshake = createHandshake();
     }
 
+    /**
+     * TODO: Document this
+     */
     @Override
     public void run() {
         // TODO: Loop dis
         // TODO: Keep alives
         // TODO: Verify talking to right client
+        // TODO: Set state
         byte[] buffer = new byte[1024];
         try {
             System.out.println("Connecting to peer: " + peerInfo.get("ip") + " : " + peerInfo.get("port"));
@@ -98,6 +109,12 @@ public class Peer implements Runnable {
         return handshakeBuffer;
     }
 
+    /**
+     * Used to know if a peer can provide a certain piece
+     *
+     * @param index Index of a piece relative to a torrent
+     * @return Whether or not the peer has the piece
+     */
     public boolean canGetPiece(int index) {
         // TODO: Return if peer has piece
         return true;
@@ -107,5 +124,35 @@ public class Peer implements Runnable {
 		// TODO: Download piece.
 		currentPiece = piece;
 	}
+
+    /**
+     * Constructs a request message for a peer
+     *
+     * @param index
+     * @param begin
+     * @param length
+     * @return
+     */
+    public ByteBuffer getRequestMessage(int index, int begin, int length) {
+        ByteBuffer bb = ByteBuffer.allocate(17);
+        bb.put(REQUEST);
+        bb.put((byte)index);
+        bb.put((byte)begin);
+        bb.put((byte)length);
+        return bb;
+    }
+
+    /**
+     * Constructs a gave message for a peer
+     *
+     * @param index
+     * @return
+     */
+    public ByteBuffer getHaveMessage(int index) {
+        ByteBuffer bb = ByteBuffer.allocate(9);
+        bb.put(HAVE);
+        bb.put((byte)index);
+        return bb;
+    }
 }
 
