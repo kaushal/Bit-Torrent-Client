@@ -5,11 +5,23 @@ import java.util.HashMap;
 
 public class Peer implements Runnable {
     private final String PROTOCOL_HEADER = "BitTorrent protocol";
+    private final byte[] KEEP_ALIVE = new byte[]{0,0,0,0};
+    private final byte[] CHOKE = new byte[]{0,0,0,1,0};
+    private final byte[] UNCHOKE = new byte[]{0,0,0,1,1};
+    private final byte[] INTERESTED = new byte[]{0,0,0,1,2};
+    private final byte[] NOT_INTERESTED = new byte[]{0,0,0,1,3};
+    private final byte[] HAVE = new byte[]{0,0,0,5,4};
+    private final byte[] REQUEST = new byte[]{0,0,1,3,6};
 
-    HashMap<String, Object> peerInfo;
-    ByteBuffer infoHash;
-    ByteBuffer peerId;
-    ByteBuffer handshake;
+    private final byte[] PIECE = new byte[]{0,0,0,0}; // TODO: PIECE
+
+    private HashMap<String, Object> peerInfo;
+    private ByteBuffer infoHash;
+    private ByteBuffer peerId;
+    private ByteBuffer handshake;
+    private String state;
+
+    private Socket sock;
 
     public Peer(HashMap<String, Object> peerInfo, ByteBuffer infoHash, ByteBuffer peerId) {
         this.peerInfo = peerInfo;
@@ -21,13 +33,15 @@ public class Peer implements Runnable {
     @Override
     public void run() {
         // TODO: Loop dis
-        Socket sock;
+        // TODO: Keep alives
+        // TODO: Verify talking to right client
         try {
+            System.out.println(peerInfo.get("ip") + " : " + peerInfo.get("port"));
             sock = new Socket((String)peerInfo.get("ip"), (Integer)peerInfo.get("port"));
             OutputStream outStream = sock.getOutputStream();
             BufferedReader inputReader = new BufferedReader(new InputStreamReader(sock.getInputStream()));
             outStream.write(this.handshake.array());
-            inputReader.readLine();
+            outStream.write(INTERESTED);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -48,9 +62,9 @@ public class Peer implements Runnable {
         this.infoHash.position(0);
         this.peerId.position(0);
 
-        handshakeBuffer.put((byte) 19);
+        handshakeBuffer.put((byte)19);
         handshakeBuffer.put(PROTOCOL_HEADER.getBytes());
-        handshakeBuffer.putInt(0);
+        handshakeBuffer.putInt(0); // Two ints are 8 bytes
         handshakeBuffer.putInt(0);
         handshakeBuffer.put(this.infoHash);
         handshakeBuffer.put(this.peerId);
@@ -59,6 +73,11 @@ public class Peer implements Runnable {
         this.peerId.position(0);
 
         return handshakeBuffer;
+    }
+
+    public boolean canGetPiece(int index) {
+        // TODO: Return if peer has piece
+        return false;
     }
 }
 
