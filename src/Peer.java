@@ -117,8 +117,6 @@ public class Peer implements Runnable {
 				}
 			}
 		}
-		if (resp.compareTo(ByteBuffer.wrap(PROTOCOL_HEADER.getBytes())) != 0) return false;
-
 
 		return true;
 	}
