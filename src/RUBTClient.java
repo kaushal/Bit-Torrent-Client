@@ -37,8 +37,8 @@ public class RUBTClient {
 
         Tracker tracker = new Tracker(ti);
 
-        System.out.println(tracker.getPeers());
-
+        //System.out.println(tracker.getPeers());
+        new Thread(new Torrent()).start();
 
 //		new String(((java.nio.ByteBuffer) this).array());
 //		ToolKit.print(res);
