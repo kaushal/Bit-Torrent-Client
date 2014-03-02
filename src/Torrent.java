@@ -31,9 +31,11 @@ public class Torrent implements Runnable {
 	private int uploaded = 0;
 	private int downloaded = 0;
 	private int left = 0;
+	private String fileName;
 
-    public Torrent(TorrentInfo ti) {
+    public Torrent(TorrentInfo ti, String fileName) {
         this.torrentInfo = ti;
+        this.fileName = fileName;
         this.encodedInfoHash = encodeInfoHash(this.torrentInfo.info_hash.array());
 	    this.peerId = generateId();
 	    this.pieces = generatePieces();
@@ -57,7 +59,7 @@ public class Torrent implements Runnable {
 			        (new Thread(pr)).start();
 			    }
 		    }
-		    dataFile = new RandomAccessFile("/Users/eddiezane/Desktop/blerghfile","rw");
+		    dataFile = new RandomAccessFile(this.fileName,"rw");
 		    fileByteBuffer = dataFile.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, (Integer)torrentInfo.info_map.get(TorrentInfo.KEY_LENGTH));
 
 		    while (true) {
