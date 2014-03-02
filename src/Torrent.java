@@ -7,7 +7,6 @@ import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.channels.ServerSocketChannel;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Random;
@@ -16,41 +15,101 @@ public class Torrent implements Runnable {
 
     private TorrentInfo torrentInfo;
     private ArrayList<Piece> pieces;
+	private ArrayList<Piece> busyPieces = new ArrayList<Piece>();
     private String encodedInfoHash;
 	private RandomAccessFile dataFile;
 	private MappedByteBuffer fileByteBuffer;
 	private HashMap<String,Object> infoMap;
 	private String peerId;
-	private ArrayList<Peer> peers = new ArrayList<Peer>();
-	private ServerSocketChannel socketChannel;
+	private ArrayList<Peer> freePeers = new ArrayList<Peer>();
+	private HashMap<Piece,Peer> busyPeers = new HashMap<Piece, Peer>();
+
+	private final Object runLock = new Object();
+	private boolean running = true;
 
 	private int port = 6881;
 	private int uploaded = 0;
 	private int downloaded = 0;
-	private int left = 1024;
+	private int left = 0;
 
     public Torrent(TorrentInfo ti) {
         this.torrentInfo = ti;
         this.encodedInfoHash = encodeInfoHash(this.torrentInfo.info_hash.array());
 	    this.peerId = generateId();
-
+	    this.pieces = generatePieces();
+	    this.left = ti.file_length;
     }
 
+	public void stop() {
+		synchronized (runLock) {
+			running = false;
+		}
+	}
 
     @Override
     public void run() {
-	    // TODO: Only accept the RUBT11 peers
 	    try {
 		    ArrayList<HashMap<String,Object>> tmp_peers = getPeers();
 		    for (HashMap<String,Object> p : tmp_peers) {
-			    if (((String)p.get("peer id")).startsWith("RUBT") && p.get("ip").equals("128.6.171.130"))
-			        peers.add(new Peer(p,this.torrentInfo.info_hash,ByteBuffer.wrap(this.peerId.getBytes())));
+			    if (((String)p.get("peer id")).startsWith("RUBT") && p.get("ip").equals("128.6.171.130")) {
+				    Peer pr = new Peer(p,this.torrentInfo.info_hash,ByteBuffer.wrap(this.peerId.getBytes()));
+				    freePeers.add(pr);
+			        (new Thread(pr)).start();
+			    }
 		    }
-		    for (Peer p : peers) {
-			    (new Thread(p)).start();
-		    }
+
+
 		    dataFile = new RandomAccessFile("/Users/wlangford/Desktop/blerghfile","rw");
 		    fileByteBuffer = dataFile.getChannel().map(FileChannel.MapMode.READ_WRITE,0, (Integer)torrentInfo.info_map.get(TorrentInfo.KEY_LENGTH));
+
+		    while (true) {
+			    synchronized (runLock) {
+				    if (!running) {
+					    break;
+				    }
+			    }
+			    synchronized (fileLock) {
+				  if (busyPieces.size() == 0 && pieces.size() == 0)
+					  break;
+			    }
+			    ArrayList<Peer> tmpPeers = new ArrayList<Peer>();
+			    synchronized (freePeers) {
+				    for (Peer p : freePeers) {
+					    Piece piece = null;
+					    for (Piece pc: pieces) {
+						    if (p.canGetPiece(pc.getIndex())) {
+							    piece = pc;
+							    break;
+						    }
+					    }
+					    if (piece == null)
+						    continue;
+					    synchronized (fileLock) {
+						    pieces.remove(piece);
+						    busyPieces.add(piece);
+						    p.getPiece(piece);
+						    tmpPeers.add(p);
+						    busyPeers.put(piece,p);
+					    }
+				    }
+				    for (Peer p : tmpPeers) {
+					    freePeers.remove(p);
+				    }
+			    }
+
+
+		    }
+		    synchronized (fileLock) {
+			    dataFile.close();
+			    fileByteBuffer = null;
+		    }
+		    for (Peer p : freePeers) {
+			    p.stop();
+		    }
+		    for (Peer p : busyPeers.values()) {
+			    p.stop();
+		    }
+		    // Done.
 
 	    } catch (FileNotFoundException e) {
 		    e.printStackTrace();
@@ -62,15 +121,29 @@ public class Torrent implements Runnable {
     }
 
 
-	private Object pieceLock = new Object();
-	public void putPiece(ByteBuffer pieceData, int piece) {
-		synchronized (pieceLock) {
-			fileByteBuffer.position(piece * (Integer)torrentInfo.info_map.get(TorrentInfo.KEY_PIECE_LENGTH));
+	private final Object fileLock = new Object();
+	public void putPiece(ByteBuffer pieceData, Piece piece) {
+		synchronized (fileLock) {
+			fileByteBuffer.position(piece.getIndex() * torrentInfo.piece_length);
 			fileByteBuffer.put(pieceData);
+			synchronized (freePeers) {
+				freePeers.add(busyPeers.get(piece));
+				busyPeers.remove(piece);
+				busyPieces.remove(piece);
+			}
 		}
 	}
 
 
+
+	private ArrayList<Piece> generatePieces() {
+		ArrayList<Piece> al = new ArrayList<Piece>();
+		int total = torrentInfo.file_length;
+		for (int i = 0; i < torrentInfo.piece_hashes.length; ++i,total -= torrentInfo.piece_length) {
+			al.add(new Piece(i,Math.min(total,torrentInfo.piece_length),torrentInfo.piece_hashes[i],this));
+		}
+		return al;
+	}
 	private String generateId() {
 		StringBuilder finalString = new StringBuilder(20).append("EWOK");
 		Random rng = new Random(System.currentTimeMillis());
@@ -86,13 +159,11 @@ public class Torrent implements Runnable {
      *
      * @return ArrayList of peers from tracker
      */
+    @SuppressWarnings("unchecked")
     public ArrayList<HashMap<String,Object>> getPeers() throws IOException, BencodingException {
 		/*
 		 * URL Encode the infoHash
 		 */
-
-	    //TODO: Actually handle port, uploaded, downloaded, left
-
         URL url = new URL(this.torrentInfo.announce_url.toString() +
 		        "?info_hash=" + this.encodedInfoHash +
 		        "&peer_id=" + peerId +
@@ -101,9 +172,6 @@ public class Torrent implements Runnable {
 		        "&downloaded="+downloaded+
 		        "&left="+left);
         HttpURLConnection con = (HttpURLConnection) url.openConnection();
-        int responseCode = con.getResponseCode();
-        System.out.println("\nSending 'GET' request to URL : " + url);
-        System.out.println("Response Code : " + responseCode);
 
         BufferedReader is = new BufferedReader(new InputStreamReader(con.getInputStream()));
 

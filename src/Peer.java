@@ -21,6 +21,9 @@ public class Peer implements Runnable {
     private ByteBuffer handshake;
     private String state;
 
+	private boolean running = true;
+
+	private Piece currentPiece = null;
     private Socket sock;
 
     public Peer(HashMap<String, Object> peerInfo, ByteBuffer infoHash, ByteBuffer peerId) {
@@ -42,13 +45,31 @@ public class Peer implements Runnable {
             BufferedReader inputReader = new BufferedReader(new InputStreamReader(sock.getInputStream()));
             outStream.write(this.handshake.array());
             outStream.write(INTERESTED);
+
+
+	        while (running) {
+		        if (currentPiece != null) {
+			        byte[] bytes = new byte[currentPiece.getSize()];
+			        for (int j = 0; j < bytes.length; ++j) {
+				        bytes[j] = (byte)(j & 0xff);
+			        }
+			        ByteBuffer bb = ByteBuffer.wrap(bytes);
+			        currentPiece.getOwner().putPiece(bb,currentPiece);
+			        currentPiece = null;
+		        }
+		        try {
+			        Thread.sleep(10);
+		        } catch (InterruptedException e) {
+			        e.printStackTrace();
+		        }
+	        }
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
     public void stop() {
-        // TODO:
+	    running = false;
     }
 
     /**
@@ -77,7 +98,12 @@ public class Peer implements Runnable {
 
     public boolean canGetPiece(int index) {
         // TODO: Return if peer has piece
-        return false;
+        return true;
     }
+
+	public void getPiece(Piece piece) {
+		// TODO: Download piece.
+		currentPiece = piece;
+	}
 }
 
