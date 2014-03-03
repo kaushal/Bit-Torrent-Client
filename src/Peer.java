@@ -94,6 +94,7 @@ public class Peer implements Runnable {
 					e.printStackTrace();
 				}
 			}
+
 		}
 
 		public void sendMessage(ByteBuffer msg) {
@@ -231,13 +232,11 @@ public class Peer implements Runnable {
 				break;
 			case 5: // Bitfield
 				len -= 1;
-				if (message.get() == 5) { // We have a pieces bitfield
-					availablePieces = new BitSet(len*8);
-					byte b = 0;
-					for (int j = 0; j < len * 8; ++j) {
-						if (j % 8 == 0) b = message.get();
-						availablePieces.set(j, ((b << (j % 8)) & 0xf0) != 0);
-					}
+				availablePieces = new BitSet(len*8);
+				byte b = 0;
+				for (int j = 0; j < len * 8; ++j) {
+					if (j % 8 == 0) b = message.get();
+					availablePieces.set(j, ((b << (j % 8)) & 0xf0) != 0);
 				}
 				break;
 			case 6: // Request

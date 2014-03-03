@@ -119,7 +119,7 @@ public class Torrent implements Runnable {
 	    } finally {
             synchronized (fileLock) {
                 try {
-                    dataFile.close();
+	                if (dataFile != null) dataFile.close();
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
