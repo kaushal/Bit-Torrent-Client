@@ -17,6 +17,7 @@ import java.util.Random;
  *
  * @author eddiezane
  * @author wlangford
+ * @author kaushal
  */
 public class Torrent implements Runnable {
 
