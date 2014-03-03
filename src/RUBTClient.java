@@ -46,12 +46,5 @@ public class RUBTClient {
 		Torrent tt = new Torrent(ti, args[1]);
 		(new Thread(tt)).start();
 
-
-//		new String(((java.nio.ByteBuffer) this).array());
-//		ToolKit.print(res);
-
- 
-		// Client client = new Client(args[1], ti);
-		// client.download();
 	}
 }

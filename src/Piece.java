@@ -10,13 +10,13 @@ import java.util.BitSet;
 public class Piece {
     private int index;
     private int size;
-	private String hash;
+	private byte[] hash;
 	private Torrent owner;
 	private BitSet slices;
 	private byte[] data;
 
 	public Piece(int index, int size, ByteBuffer hash, Torrent ownerTorrent) {
-		this.hash = new String(hash.array());
+		this.hash = hash.array();
 		this.owner = ownerTorrent;
 		this.index = index;
 		this.size = size;
@@ -33,7 +33,7 @@ public class Piece {
 		return size;
 	}
 
-	public String getHash() {
+	public byte[] getHash() {
 		return hash;
 	}
 
@@ -48,6 +48,10 @@ public class Piece {
 		slices.set(idx, true);
 	}
 
+	public void clearSlices() {
+		this.slices.clear();
+		this.data = new byte[size];
+	}
 	public int getNextSlice() {
 		int slice = slices.nextClearBit(0);
 		if (slice >= (size + (2<<13) - 1)/(2<<13)) return -1; // Round up.
