@@ -159,8 +159,6 @@ public class Torrent implements Runnable {
      * @param piece A piece object representation to be added
      */
 	public void putPiece(Piece piece) {
-		// TODO: Handle when check fails...
-		// SHA1 check...
 		MessageDigest md = null;
 		try {
 			md = MessageDigest.getInstance("SHA-1");
