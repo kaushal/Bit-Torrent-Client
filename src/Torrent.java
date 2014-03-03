@@ -135,7 +135,7 @@ public class Torrent implements Runnable {
     }
 
 	public void peerDying(Peer p) {
-		System.out.println("Peer "+p+" died. Sadface.");
+		System.out.println("Peer " + p + " died. Sadface.");
 		synchronized (freePeers) {
 			if (freePeers.contains(p)) {
 				freePeers.remove(p);
@@ -150,13 +150,12 @@ public class Torrent implements Runnable {
     /**
      * Write the piece data to the piece buffer
      *
-     * @param pieceData A bytebuffer containing data of a piece
      * @param piece A piece object representation to be added
      */
-	public void putPiece(ByteBuffer pieceData, Piece piece) {
+	public void putPiece(Piece piece) {
 		synchronized (fileLock) {
 			fileByteBuffer.position(piece.getIndex() * torrentInfo.piece_length);
-			fileByteBuffer.put(pieceData);
+			fileByteBuffer.put(piece.getByteBuffer());
         }
         synchronized (freePeers) {
             freePeers.add(busyPeers.get(piece));
