@@ -64,7 +64,17 @@ public class Torrent implements Runnable {
     @Override
     public void run() {
 	    try {
-		    ArrayList<HashMap<String,Object>> tmp_peers = getPeers();
+		    // TODO: Undo manual choice
+		    ArrayList<HashMap<String,Object>> tmp_peers = new ArrayList<HashMap<String, Object>>();
+		    HashMap<String,Object> bler = new HashMap<String,Object>();
+		    bler.put("peer id","RUBT11GOKGCECYUYZYVF");
+		    bler.put("ip","128.6.171.130");
+		    bler.put("port",new Integer(17928));
+		    tmp_peers.add(bler);
+		    if (tmp_peers.size() == 0) {
+			    throw new BencodingException("");
+		    }
+//		    tmp_peers = getPeers();
 		    for (HashMap<String,Object> p : tmp_peers) {
 			    if (((String)p.get("peer id")).startsWith("RUBT") && p.get("ip").equals("128.6.171.130")) {
 				    Peer pr = new Peer(p,this,this.torrentInfo.info_hash,ByteBuffer.wrap(this.peerId.getBytes()));
@@ -213,15 +223,17 @@ public class Torrent implements Runnable {
 		        "&left="+left); // TODO: Add start event
         HttpURLConnection con = (HttpURLConnection) url.openConnection();
 
-        BufferedReader is = new BufferedReader(new InputStreamReader(con.getInputStream()));
+	    DataInputStream dis = new DataInputStream(con.getInputStream());
+	    ByteArrayOutputStream baos = new ByteArrayOutputStream(); // Like a baos
 
-        ByteArrayOutputStream baos = new ByteArrayOutputStream(); // Like a baos
-        int reads = is.read();
+        int reads = dis.read();
         while (reads != -1) {
             baos.write(reads);
-            reads = is.read();
+            reads = dis.read();
         }
-        is.close();
+        dis.close();
+	    System.out.println("WTFMAN");
+	    System.out.println("Decode:" + new String(baos.toByteArray()));
         HashMap<String,Object> res = (HashMap<String,Object>)BencodeWrapper.decode(baos.toByteArray());
 	    return (ArrayList<HashMap<String,Object>>)res.get("peers");
     }

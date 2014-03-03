@@ -36,6 +36,7 @@ public class Peer implements Runnable {
     private ByteBuffer peerId;
     private ByteBuffer handshake;
     private PeerState state = PeerState.BEGIN;
+	private String pieceState = null; // Dirty dirty
 	private BitSet availablePieces = new BitSet();
 	private Torrent owner;
 
@@ -69,19 +70,46 @@ public class Peer implements Runnable {
 				InputStream inputStream = sock.getInputStream();
 				int len = 0;
 				byte[] buffer = new byte[(2<<13)*2];
+				ByteBuffer writingBuffer = ByteBuffer.wrap(buffer);
 				while (running) {
 					Thread.sleep(10);
-					if (inputStream.available() > 0) { // We have bytes to read...
-						len = inputStream.read(buffer);
-						ByteBuffer msgBuf = ByteBuffer.allocate(len);
-						msgBuf.put(buffer, 0, len);
-						msgBuf.flip();
-						p.recvMessage(msgBuf);
-					}
 					ByteBuffer msg = messages.poll();
-					if (msg != null) { // We have a massage to send.
+					if (msg != null) { // We have a message to send.
 						outputStream.write(msg.array());
 					}
+					if (inputStream.available() > 0) { // We have bytes to read...
+						byte[] tbuf = new byte[1024];
+						len = inputStream.read(tbuf);
+						writingBuffer.put(tbuf, 0, len);
+					}
+					if (writingBuffer.position() <= 4) continue; // Not enough to know yet...
+					if (p.state == PeerState.HANDSHAKE) {
+						// Handshake is a bit different
+						if (writingBuffer.position() >= 68) { // Handshake is complete.
+							int ol = writingBuffer.position();
+							writingBuffer.position(68).flip(); // Grab the first 68 bytes.
+							ByteBuffer msgBuf = ByteBuffer.allocate(68);
+							msgBuf.put(writingBuffer);
+							msgBuf.flip();
+							writingBuffer.limit(ol);
+							writingBuffer.compact();
+							p.recvMessage(msgBuf);
+						}
+					} else {
+						len = ByteBuffer.wrap(buffer).getInt()+4;
+						while (writingBuffer.position() >= len) { // We have a full message now!
+							int ol = writingBuffer.position();
+							writingBuffer.position(len).flip();
+							ByteBuffer msgBuf = ByteBuffer.allocate(len);
+							msgBuf.put(writingBuffer);
+							msgBuf.flip();
+
+							writingBuffer.limit(ol);
+							writingBuffer.compact();
+							p.recvMessage(msgBuf);
+						}
+					}
+
 				}
 			} catch (IOException e) {
 				e.printStackTrace();
@@ -139,7 +167,9 @@ public class Peer implements Runnable {
 		        if (msg != null) {
 			        handleMessage(msg);
 		        }
-
+		        if (currentPiece != null) {
+			        handlePiece();
+		        }
 	        }
 
 	        this.socketRunner.shutdown();
@@ -185,6 +215,28 @@ public class Peer implements Runnable {
 	    running = false;
     }
 
+	public void handlePiece  () {
+		if (pieceState == null) { // We haven't worked with this piece yet.
+			if (state == PeerState.CHOKED) {
+			socketRunner.sendMessage(ByteBuffer.wrap(INTERESTED));
+			pieceState = "Interested";
+			} else if (state == PeerState.UNCHOKED) {
+				int slice = currentPiece.getNextSlice();
+				if (slice == -1) { // We've gotten all of the slices already.  So, we're done! Yay.
+					System.out.println("Starting a piece and there are no slices... Wtf?");
+//					        currentPiece.getOwner().putPiece(currentPiece);
+					currentPiece = null;
+					return;
+				}
+				ByteBuffer buf = getRequestMessage(currentPiece.getIndex(), slice * (2<<13), Math.min(2<<13, currentPiece.getSize() - (slice * 2<<13)));
+				socketRunner.sendMessage(buf);
+				state = PeerState.DOWNLOADING;
+				pieceState = "Downloading";
+				System.out.println("Unchoke and interested");
+			}
+		}
+	}
+
 	public void handleMessage(ByteBuffer message) {
 		if (state == PeerState.HANDSHAKE) {
 			System.out.println("Hand shaken.");
@@ -209,7 +261,13 @@ public class Peer implements Runnable {
 			}
 			return;
 		}
+		System.out.print("Message: " + message.position() + " : " + message.limit() + " : ");
+		for (int jj = 0; jj < message.limit(); jj++) {
+				System.out.print(String.format("%02X",message.array()[jj]));
+		}
+		System.out.println("");
 		int len = message.getInt();
+		if (len == 0) return; // Keepalive
 		byte type = message.get();
 		switch (type) {
 			// TODO: Switch to constants
@@ -220,6 +278,20 @@ public class Peer implements Runnable {
 			case 1: // Unchoke
 				System.out.println("Unchoke.");
 				state = PeerState.UNCHOKED;
+				if (pieceState == "Interested") { // Always should...
+					int slice = currentPiece.getNextSlice();
+			        if (slice == -1) { // We've gotten all of the slices already.  So, we're done! Yay.
+				        System.out.println("Starting a piece and there are no slices... Wtf?");
+//					        currentPiece.getOwner().putPiece(currentPiece);
+				        currentPiece = null;
+				        break;
+			        }
+			        ByteBuffer buf = getRequestMessage(currentPiece.getIndex(), slice * (2<<13), Math.min(2<<13, currentPiece.getSize() - (slice * 2<<13)));
+					socketRunner.sendMessage(buf);
+				    state = PeerState.DOWNLOADING;
+					pieceState = "Downloading";
+					System.out.println("Unchoke and interested");
+				}
 				break;
 			case 2: // Interested
 				System.out.println("They want our body.");
@@ -248,16 +320,26 @@ public class Peer implements Runnable {
 				int idx = message.getInt();
 				int begin = message.getInt();
 				((ByteBuffer)pieceBuffer.position(begin)).put(message);
-				currentPiece.putSlice(idx);
+				currentPiece.putSlice(begin/(2<<13));
+
+				int slice = currentPiece.getNextSlice();
+				if (slice == -1) { // We've gotten all of the slices already.  So, we're done! Yay.
+					System.out.println("All done with this piece.");
+					currentPiece.getOwner().putPiece(currentPiece);
+					currentPiece = null;
+					state = PeerState.UNCHOKED;
+//					socketRunner.sendMessage(ByteBuffer.wrap(NOT_INTERESTED));
+//					state = PeerState.CHOKED;
+				} else {
+					ByteBuffer buf = getRequestMessage(currentPiece.getIndex(), slice * (2<<13), Math.min(2<<13, currentPiece.getSize() - (slice * 2<<13)));
+					socketRunner.sendMessage(buf);
+				}
 				break;
 
 			default:
 				// BLERGH FACE
 				return;
 		}
-
-
-
 	}
 
 	public void recvMessage(ByteBuffer msg) {
@@ -306,7 +388,7 @@ public class Peer implements Runnable {
     }
 
 	public void getPiece(Piece piece) {
-		// TODO: Download piece.
+		pieceState = null;
 		currentPiece = piece;
 	}
 
@@ -319,11 +401,12 @@ public class Peer implements Runnable {
      * @return
      */
     public ByteBuffer getRequestMessage(int index, int begin, int length) {
+	    System.out.println("Req: " + index + " " + begin + " " + length);
         ByteBuffer bb = ByteBuffer.allocate(17);
         bb.put(REQUEST);
-        bb.put((byte)index);
-        bb.put((byte)begin);
-        bb.put((byte)length);
+        bb.putInt(index);
+        bb.putInt(begin);
+        bb.putInt(length);
         return bb;
     }
 
