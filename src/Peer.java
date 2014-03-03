@@ -3,8 +3,11 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * A connection to a peer that is responsible for downloading
@@ -37,9 +40,66 @@ public class Peer implements Runnable {
 	private Torrent owner;
 
 	private boolean running = true;
+	private boolean die = false;
 
 	private Piece currentPiece = null;
-    private Socket sock;
+
+
+	private ConcurrentLinkedQueue<ByteBuffer> messages = new ConcurrentLinkedQueue<ByteBuffer>();
+	private class PeerSocketRunnable implements Runnable {
+
+		private Peer p;
+		private Socket sock;
+		private String ip;
+		private int port;
+
+		private ConcurrentLinkedQueue<ByteBuffer> messages = new ConcurrentLinkedQueue<ByteBuffer>();
+
+		public PeerSocketRunnable(Peer p, String ip, int port) {
+			this.p = p;
+			this.ip = ip;
+			this.port = port;
+		}
+
+		@Override
+		public void run() {
+			try {
+				sock = new Socket(ip,port);
+				OutputStream outputStream = sock.getOutputStream();
+				InputStream inputStream = sock.getInputStream();
+				int len = 0;
+				byte[] buffer = new byte[(2<<13)*2];
+				while (running) {
+					if (inputStream.available() > 0) { // We have bytes to read...
+						len = inputStream.read(buffer);
+						ByteBuffer msgBuf = ByteBuffer.allocate(len);
+						msgBuf.put(buffer, 0, len);
+						msgBuf.flip();
+						p.recvMessage(msgBuf);
+					}
+					ByteBuffer msg = messages.poll();
+					if (msg != null) { // We have a massage to send.
+						outputStream.write(msg.array());
+					}
+				}
+				sock.close();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+
+		}
+
+		public void sendMessage(ByteBuffer msg) {
+			messages.add(msg);
+		}
+		public void shutdown() {
+			running = false;
+		}
+	}
+
+	private PeerSocketRunnable socketRunner;
+
+	private Socket sock;
 
     public Peer(HashMap<String, Object> peerInfo, Torrent owner, ByteBuffer infoHash, ByteBuffer peerId) {
         this.peerInfo = peerInfo;
@@ -47,6 +107,7 @@ public class Peer implements Runnable {
         this.peerId = peerId.duplicate();
         this.handshake = createHandshake();
 	    this.owner = owner;
+
     }
 
     /**
@@ -60,82 +121,127 @@ public class Peer implements Runnable {
 	    state = PeerState.HANDSHAKE;
         try {
             System.out.println("Connecting to peer: " + peerInfo.get("ip") + " : " + peerInfo.get("port"));
-            sock = new Socket((String)peerInfo.get("ip"), (Integer)peerInfo.get("port"));
-            OutputStream outStream = sock.getOutputStream();
-            InputStream inputStream = sock.getInputStream();
-            outStream.write(this.handshake.array());
-            int len = inputStream.read(buffer);
-	        boolean success = processHandshakeResponse(ByteBuffer.wrap(buffer, 0, len));
+	        this.socketRunner = new PeerSocketRunnable(this, (String)peerInfo.get("ip"), (Integer)peerInfo.get("port"));
+	        (new Thread(this.socketRunner)).start();
+	        this.socketRunner.sendMessage(this.createHandshake());
 
-	        if (!success) {
+	        while (running && !die) {
+		        Thread.sleep(10);
+		        ByteBuffer msg = messages.poll();
+		        if (msg != null) {
+			        handleMessage(msg);
+		        }
+
+	        }
+
+	        this.socketRunner.shutdown();
+	        if (die) {
 		        owner.peerDying(this);
 		        return;
 	        }
-	        state = PeerState.CHOKED;
-
-	        while (running) {
-		        try {
-			        Thread.sleep(10);
-		        } catch (InterruptedException e) {
-			        e.printStackTrace();
-		        }
-		        if (currentPiece != null) {
-			        if (state == PeerState.CHOKED)
-			            outStream.write(INTERESTED);
-			        else if (state == PeerState.UNCHOKED) {
-				        int slice = currentPiece.getNextSlice();
-				        if (slice == -1) { // We've gotten all of the slices already.  So, we're done! Yay.
-					        currentPiece.getOwner().putPiece(currentPiece);
-					        currentPiece = null;
-					        continue;
-				        }
-				        ByteBuffer buf = getRequestMessage(currentPiece.getIndex(), slice * (2<<13), Math.min(2<<13, currentPiece.getSize() - (slice * 2<<13)));
-				        outStream.write(buf.array());
-				        state = PeerState.DOWNLOADING;
-			        } else if (state == PeerState.DOWNLOADING) {
-				        // Shouldn't happen? Question mark?
-				        continue;
-			        }
-
-			        len = inputStream.read(buffer);
-			        parseResponse(ByteBuffer.wrap(buffer,0,len));
-		        }
-
-	        }
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (InterruptedException e) {
+	        e.printStackTrace();
         }
+
+//	        while (running) {
+//		        try {
+//			        Thread.sleep(10);
+//		        } catch (InterruptedException e) {
+//			        e.printStackTrace();
+//		        }
+//		        if (currentPiece != null) {
+//			        if (state == PeerState.CHOKED) {
+//			            outStream.write(INTERESTED);
+//			        } else if (state == PeerState.UNCHOKED) {
+//				        int slice = currentPiece.getNextSlice();
+//				        if (slice == -1) { // We've gotten all of the slices already.  So, we're done! Yay.
+//					        currentPiece.getOwner().putPiece(currentPiece);
+//					        currentPiece = null;
+//					        continue;
+//				        }
+//				        ByteBuffer buf = getRequestMessage(currentPiece.getIndex(), slice * (2<<13), Math.min(2<<13, currentPiece.getSize() - (slice * 2<<13)));
+//				        outStream.write(buf.array());
+//				        state = PeerState.DOWNLOADING;
+//			        } else if (state == PeerState.DOWNLOADING) {
+//				        // Shouldn't happen? Question mark?
+//				        continue;
+//			        }
+//
+//			        len = inputStream.read(buffer);
+//			        parseResponse(ByteBuffer.wrap(buffer,0,len));
+//		        }
+//          }
     }
 
     public void stop() {
 	    running = false;
     }
 
-	public void parseResponse(ByteBuffer resp) {
-		int len = resp.getInt();
-		byte type = resp.get();
+	public void handleMessage(ByteBuffer message) {
+		if (state == PeerState.HANDSHAKE) {
+			System.out.println("Hand shaken.");
+			if (message.get() != 19 || ((ByteBuffer)message.slice().limit(19)).compareTo(ByteBuffer.wrap(PROTOCOL_HEADER.getBytes())) != 0) { // Not BT
+				die = true;
+				return;
+			}
+			message.position(message.position()+19+8);
+			if (((ByteBuffer)message.slice().limit(20)).compareTo(infoHash) != 0) { // Wrong infohash
+				die = true;
+				return;
+			}
+			message.position(message.position() + 20);
+			if (((ByteBuffer)message.slice().limit(20)).compareTo(ByteBuffer.wrap(((String)peerInfo.get("peer id")).getBytes())) != 0) { // Wrong peerId
+				die = true;
+				return;
+			}
+			message.position(message.position() + 20);
+			state = PeerState.CHOKED;
+			if (message.hasRemaining()) {
+				handleMessage(message);
+			}
+			return;
+		}
+		int len = message.getInt();
+		byte type = message.get();
 		switch (type) {
 			// TODO: Switch to constants
 			case 0: // Choke
+				System.out.println("AEA");
+				state = PeerState.CHOKED;
 				break;
 			case 1: // Unchoke
+				System.out.println("Unchoke.");
 				state = PeerState.UNCHOKED;
 				break;
 			case 2: // Interested
+				System.out.println("They want our body.");
 				break;
 			case 3: // Uninterested
+				System.out.println("We need the gym.");
 				break;
 			case 4: // Have
+				System.out.println("They got something.");
 				break;
 			case 5: // Bitfield
+				len -= 1;
+				if (message.get() == 5) { // We have a pieces bitfield
+					availablePieces = new BitSet(len*8);
+					byte b = 0;
+					for (int j = 0; j < len * 8; ++j) {
+						if (j % 8 == 0) b = message.get();
+						availablePieces.set(j, ((b << (j % 8)) & 0xf0) != 0);
+					}
+				}
 				break;
 			case 6: // Request
+				System.out.println("They want our data.  We don't want to give it.  Because negative ratios are pro. Also, fuck you.");
 				break;
 			case 7: // Piece
+				System.out.println("Incoming data.");
 				ByteBuffer pieceBuffer = currentPiece.getByteBuffer();
-				int idx = resp.getInt();
-				int begin = resp.getInt();
-				((ByteBuffer)pieceBuffer.position(begin)).put(resp);
+				int idx = message.getInt();
+				int begin = message.getInt();
+				((ByteBuffer)pieceBuffer.position(begin)).put(message);
 				currentPiece.putSlice(idx);
 				break;
 
@@ -148,29 +254,11 @@ public class Peer implements Runnable {
 
 	}
 
-	public boolean processHandshakeResponse(ByteBuffer resp) {
-		if (resp.get() != 19) return false; // Not BT
-		if (((ByteBuffer)resp.slice().limit(19)).compareTo(ByteBuffer.wrap(PROTOCOL_HEADER.getBytes())) != 0) return false; // Not BT
-		resp.position(resp.position()+19+8);
-		if (((ByteBuffer)resp.slice().limit(20)).compareTo(infoHash) != 0) return false; // Wrong infohash
-		resp.position(resp.position() + 20);
-		if (((ByteBuffer)resp.slice().limit(20)).compareTo(ByteBuffer.wrap(((String)peerInfo.get("peer id")).getBytes())) != 0) return false; // Wrong peerId
-		resp.position(resp.position() + 20);
-		if (resp.hasRemaining()) {
-			resp.compact().flip();
-			int len = resp.getInt() - 1;
-			if (resp.get() == 5) { // We have a pieces bitfield
-				availablePieces = new BitSet(len*8);
-				byte b = 0;
-				for (int j = 0; j < len * 8; ++j) {
-					if (j % 8 == 0) b = resp.get();
-					availablePieces.set(j,((b << (j % 8)) & 0xf0) != 0);
-				}
-			}
-		}
-
-		return true;
+	public void recvMessage(ByteBuffer msg) {
+		messages.add(msg);
 	}
+
+
     /**
      * Creates the peer handshake
      *
@@ -204,7 +292,7 @@ public class Peer implements Runnable {
     public boolean canGetPiece(int index) {
         // TODO: Return if peer has piece
 	    try {
-	        return availablePieces.get(index);
+	        return true; //availablePieces.get(index);
 	    } catch (IndexOutOfBoundsException e) {
 		    e.printStackTrace();
 	    }
