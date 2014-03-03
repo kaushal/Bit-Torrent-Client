@@ -6,7 +6,9 @@ import edu.rutgers.cs.cs352.bt.exceptions.BencodingException;
 import edu.rutgers.cs.cs352.bt.util.Bencoder2;
 
 /**
- * Created by wlangford on 3/1/14.
+ * Wrapper around bencode2 class does most of the type casting for us.
+ * 
+ * @author wlangford
  */
 
 public class BencodeWrapper {

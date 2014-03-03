@@ -1,4 +1,5 @@
 import edu.rutgers.cs.cs352.bt.TorrentInfo;
+
 import edu.rutgers.cs.cs352.bt.exceptions.BencodingException;
 
 import java.io.DataInputStream;
@@ -6,6 +7,14 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 
+/**
+ * Start of the program contains main method and spawns a new torrent object. 
+ * is responsible for parsing information out of torrent file and storing result in ti
+ *
+ * @author eddiezane
+ * @author wlangford
+ * @author kaushal
+ */
 public class RUBTClient {
 
 

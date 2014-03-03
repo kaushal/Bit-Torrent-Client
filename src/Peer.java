@@ -15,6 +15,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  *
  * @author eddiezane
  * @author wlangford
+ * @author kaushal 
  */
 public class Peer implements Runnable {
 	public enum PeerState {
