@@ -7,7 +7,10 @@ import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Random;
 
@@ -65,17 +68,7 @@ public class Torrent implements Runnable {
     @Override
     public void run() {
 	    try {
-		    // TODO: Undo manual choice
-		    ArrayList<HashMap<String,Object>> tmp_peers = new ArrayList<HashMap<String, Object>>();
-		    HashMap<String,Object> bler = new HashMap<String,Object>();
-		    bler.put("peer id","RUBT11GOKGCECYUYZYVF");
-		    bler.put("ip","128.6.171.130");
-		    bler.put("port",new Integer(17928));
-		    tmp_peers.add(bler);
-		    if (tmp_peers.size() == 0) {
-			    throw new BencodingException("");
-		    }
-//		    tmp_peers = getPeers();
+		    ArrayList<HashMap<String,Object>> tmp_peers = getPeers();
 		    for (HashMap<String,Object> p : tmp_peers) {
 			    if (((String)p.get("peer id")).startsWith("RUBT") && p.get("ip").equals("128.6.171.130")) {
 				    Peer pr = new Peer(p,this,this.torrentInfo.info_hash,ByteBuffer.wrap(this.peerId.getBytes()));
@@ -93,8 +86,10 @@ public class Torrent implements Runnable {
 				    }
 			    }
 			    synchronized (fileLock) {
-				  if (busyPieces.size() == 0 && pieces.size() == 0)
+				  if (busyPieces.size() == 0 && pieces.size() == 0) {
+					  sendCompleteEvent();
 					  break;
+				  }
 			    }
 			    ArrayList<Peer> tmpPeers = new ArrayList<Peer>();
 			    synchronized (freePeers) {
@@ -164,15 +159,31 @@ public class Torrent implements Runnable {
      * @param piece A piece object representation to be added
      */
 	public void putPiece(Piece piece) {
+		// TODO: Handle when check fails...
+		// SHA1 check...
+		MessageDigest md = null;
+		try {
+			md = MessageDigest.getInstance("SHA-1");
+		}
+		catch(NoSuchAlgorithmException e) {
+			e.printStackTrace();
+		}
+
+		byte[] sha1 = md.digest(piece.getByteBuffer().array());
 		synchronized (fileLock) {
-			fileByteBuffer.position(piece.getIndex() * torrentInfo.piece_length);
-			fileByteBuffer.put(piece.getByteBuffer());
-        }
-        synchronized (freePeers) {
-            freePeers.add(busyPeers.get(piece));
-            busyPeers.remove(piece);
-            busyPieces.remove(piece);
-        }
+			if (Arrays.equals(sha1,piece.getHash())) {
+				fileByteBuffer.position(piece.getIndex() * torrentInfo.piece_length);
+				fileByteBuffer.put(piece.getByteBuffer());
+	        } else {
+				piece.clearSlices();
+				pieces.add(piece);
+			}
+		}
+		synchronized (freePeers) {
+			freePeers.add(busyPeers.get(piece));
+			busyPeers.remove(piece);
+			busyPieces.remove(piece);
+		}
 	}
 
     /**
@@ -233,7 +244,6 @@ public class Torrent implements Runnable {
             reads = dis.read();
         }
         dis.close();
-	    System.out.println("WTFMAN");
 	    System.out.println("Decode:" + new String(baos.toByteArray()));
         HashMap<String,Object> res = (HashMap<String,Object>)BencodeWrapper.decode(baos.toByteArray());
 	    return (ArrayList<HashMap<String,Object>>)res.get("peers");
@@ -251,8 +261,8 @@ public class Torrent implements Runnable {
                 "&peer_id=" + peerId +
                 "&port="+port+
                 "&uploaded="+uploaded+
-                "&downloaded="+downloaded+
-                "&left="+left +
+                "&downloaded="+torrentInfo.file_length+
+                "&left=0"+
                 "&event=completed");
         HttpURLConnection con = (HttpURLConnection) url.openConnection();
     }

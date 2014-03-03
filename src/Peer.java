@@ -3,10 +3,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
-import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
@@ -40,6 +38,7 @@ public class Peer implements Runnable {
 	private String pieceState = null; // Dirty dirty
 	private BitSet availablePieces = new BitSet();
 	private Torrent owner;
+    private long lastMessage;
 
 	private boolean running = true;
 	private boolean die = false;
@@ -72,6 +71,12 @@ public class Peer implements Runnable {
 				int len = 0;
 				byte[] buffer = new byte[(2<<13)*2];
 				ByteBuffer writingBuffer = ByteBuffer.wrap(buffer);
+
+
+				// Since TCP data comes in as a byte stream and not discrete datagrams, we need to reassemble
+				// coherent messages.  This loop handles that.  buffer is responsible for data storage and is sufficiently
+				// large for any messages it may receive.  Since the handshake doesn't match the rest of the protocol,
+				// it is handled separately.
 				while (running) {
 					Thread.sleep(10);
 					ByteBuffer msg = messages.poll();
@@ -83,7 +88,7 @@ public class Peer implements Runnable {
 						len = inputStream.read(tbuf);
 						writingBuffer.put(tbuf, 0, len);
 					}
-					if (writingBuffer.position() <= 4) continue; // Not enough to know yet...
+					if (writingBuffer.position() <= 4) continue; // Not enough to do anything yet...
 					if (p.state == PeerState.HANDSHAKE) {
 						// Handshake is a bit different
 						if (writingBuffer.position() >= 68) { // Handshake is complete.
@@ -94,6 +99,8 @@ public class Peer implements Runnable {
 							msgBuf.flip();
 							writingBuffer.limit(ol);
 							writingBuffer.compact();
+
+							// Pass the message to the Peer object.
 							p.recvMessage(msgBuf);
 						}
 					} else {
@@ -110,7 +117,6 @@ public class Peer implements Runnable {
 							p.recvMessage(msgBuf);
 						}
 					}
-
 				}
 			} catch (IOException e) {
 				e.printStackTrace();
@@ -123,12 +129,13 @@ public class Peer implements Runnable {
 					e.printStackTrace();
 				}
 			}
-
 		}
 
 		public void sendMessage(ByteBuffer msg) {
+            p.lastMessage = System.currentTimeMillis();
 			messages.add(msg);
 		}
+
 		public void shutdown() {
 			running = false;
 		}
@@ -144,7 +151,6 @@ public class Peer implements Runnable {
         this.peerId = peerId.duplicate();
         this.handshake = createHandshake();
 	    this.owner = owner;
-
     }
 
     /**
@@ -152,17 +158,18 @@ public class Peer implements Runnable {
      */
     @Override
     public void run() {
-        // TODO: Keep alives
-        // TODO: Set state
-        byte[] buffer = new byte[2<<14]; // 2^15 bytes.
 	    state = PeerState.HANDSHAKE;
         try {
             System.out.println("Connecting to peer: " + peerInfo.get("ip") + " : " + peerInfo.get("port"));
 	        this.socketRunner = new PeerSocketRunnable(this, (String)peerInfo.get("ip"), (Integer)peerInfo.get("port"));
 	        (new Thread(this.socketRunner)).start();
 	        this.socketRunner.sendMessage(this.createHandshake());
+            this.lastMessage = System.currentTimeMillis();
 
 	        while (running && !die) {
+                if ((System.currentTimeMillis() - this.lastMessage) > 120000) {
+                    this.socketRunner.sendMessage(ByteBuffer.wrap(KEEP_ALIVE));
+                }
 		        Thread.sleep(10);
 		        ByteBuffer msg = messages.poll();
 		        if (msg != null) {
@@ -181,35 +188,6 @@ public class Peer implements Runnable {
         } catch (InterruptedException e) {
 	        e.printStackTrace();
         }
-
-//	        while (running) {
-//		        try {
-//			        Thread.sleep(10);
-//		        } catch (InterruptedException e) {
-//			        e.printStackTrace();
-//		        }
-//		        if (currentPiece != null) {
-//			        if (state == PeerState.CHOKED) {
-//			            outStream.write(INTERESTED);
-//			        } else if (state == PeerState.UNCHOKED) {
-//				        int slice = currentPiece.getNextSlice();
-//				        if (slice == -1) { // We've gotten all of the slices already.  So, we're done! Yay.
-//					        currentPiece.getOwner().putPiece(currentPiece);
-//					        currentPiece = null;
-//					        continue;
-//				        }
-//				        ByteBuffer buf = getRequestMessage(currentPiece.getIndex(), slice * (2<<13), Math.min(2<<13, currentPiece.getSize() - (slice * 2<<13)));
-//				        outStream.write(buf.array());
-//				        state = PeerState.DOWNLOADING;
-//			        } else if (state == PeerState.DOWNLOADING) {
-//				        // Shouldn't happen? Question mark?
-//				        continue;
-//			        }
-//
-//			        len = inputStream.read(buffer);
-//			        parseResponse(ByteBuffer.wrap(buffer,0,len));
-//		        }
-//          }
     }
 
     public void stop() {
@@ -225,7 +203,6 @@ public class Peer implements Runnable {
 				int slice = currentPiece.getNextSlice();
 				if (slice == -1) { // We've gotten all of the slices already.  So, we're done! Yay.
 					System.out.println("Starting a piece and there are no slices... Wtf?");
-//					        currentPiece.getOwner().putPiece(currentPiece);
 					currentPiece = null;
 					return;
 				}
@@ -281,9 +258,8 @@ public class Peer implements Runnable {
 				state = PeerState.UNCHOKED;
 				if (pieceState == "Interested") { // Always should...
 					int slice = currentPiece.getNextSlice();
-			        if (slice == -1) { // We've gotten all of the slices already.  So, we're done! Yay.
-				        System.out.println("Starting a piece and there are no slices... Wtf?");
-//					        currentPiece.getOwner().putPiece(currentPiece);
+			        if (slice == -1) {
+				        System.out.println("Starting a piece and there are no slices... Error?");
 				        currentPiece = null;
 				        break;
 			        }
@@ -291,7 +267,6 @@ public class Peer implements Runnable {
 					socketRunner.sendMessage(buf);
 				    state = PeerState.DOWNLOADING;
 					pieceState = "Downloading";
-					System.out.println("Unchoke and interested");
 				}
 				break;
 			case 2: // Interested
@@ -313,7 +288,7 @@ public class Peer implements Runnable {
 				}
 				break;
 			case 6: // Request
-				System.out.println("They want our data.  We don't want to give it.  Because negative ratios are pro. Also, fuck you.");
+				System.out.println("They want our data.  We don't want to give it.  Because negative ratios are pro.");
 				break;
 			case 7: // Piece
 				System.out.println("Incoming data.");
@@ -329,8 +304,6 @@ public class Peer implements Runnable {
 					currentPiece.getOwner().putPiece(currentPiece);
 					currentPiece = null;
 					state = PeerState.UNCHOKED;
-//					socketRunner.sendMessage(ByteBuffer.wrap(NOT_INTERESTED));
-//					state = PeerState.CHOKED;
 				} else {
 					ByteBuffer buf = getRequestMessage(currentPiece.getIndex(), slice * (2<<13), Math.min(2<<13, currentPiece.getSize() - (slice * 2<<13)));
 					socketRunner.sendMessage(buf);
@@ -338,15 +311,13 @@ public class Peer implements Runnable {
 				break;
 
 			default:
-				// BLERGH FACE
-				return;
+				// Shouldn't happen...
 		}
 	}
 
 	public void recvMessage(ByteBuffer msg) {
 		messages.add(msg);
 	}
-
 
     /**
      * Creates the peer handshake
@@ -379,9 +350,8 @@ public class Peer implements Runnable {
      * @return Whether or not the peer has the piece
      */
     public boolean canGetPiece(int index) {
-        // TODO: Return if peer has piece
-	    try {
-	        return true; //availablePieces.get(index);
+        try {
+	        return availablePieces.get(index);
 	    } catch (IndexOutOfBoundsException e) {
 		    e.printStackTrace();
 	    }
