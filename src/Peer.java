@@ -33,7 +33,7 @@ public class Peer implements Runnable {
     private ByteBuffer peerId;
     private ByteBuffer handshake;
     private PeerState state = PeerState.BEGIN;
-	private BitSet availablePieces;
+	private BitSet availablePieces = new BitSet();
 	private Torrent owner;
 
 	private boolean running = true;
