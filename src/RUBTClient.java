@@ -45,6 +45,5 @@ public class RUBTClient {
 		TorrentInfo ti = new TorrentInfo(byteFile);
 		Torrent tt = new Torrent(ti, args[1]);
 		(new Thread(tt)).start();
-
 	}
 }

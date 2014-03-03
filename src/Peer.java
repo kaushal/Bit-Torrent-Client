@@ -3,10 +3,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
-import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
@@ -40,6 +38,7 @@ public class Peer implements Runnable {
 	private String pieceState = null; // Dirty dirty
 	private BitSet availablePieces = new BitSet();
 	private Torrent owner;
+    private long lastMessage;
 
 	private boolean running = true;
 	private boolean die = false;
@@ -118,7 +117,6 @@ public class Peer implements Runnable {
 							p.recvMessage(msgBuf);
 						}
 					}
-
 				}
 			} catch (IOException e) {
 				e.printStackTrace();
@@ -131,12 +129,13 @@ public class Peer implements Runnable {
 					e.printStackTrace();
 				}
 			}
-
 		}
 
 		public void sendMessage(ByteBuffer msg) {
+            p.lastMessage = System.currentTimeMillis();
 			messages.add(msg);
 		}
+
 		public void shutdown() {
 			running = false;
 		}
@@ -152,7 +151,6 @@ public class Peer implements Runnable {
         this.peerId = peerId.duplicate();
         this.handshake = createHandshake();
 	    this.owner = owner;
-
     }
 
     /**
@@ -160,16 +158,18 @@ public class Peer implements Runnable {
      */
     @Override
     public void run() {
-        // TODO: Keep alives
-        // TODO: Set state
 	    state = PeerState.HANDSHAKE;
         try {
             System.out.println("Connecting to peer: " + peerInfo.get("ip") + " : " + peerInfo.get("port"));
 	        this.socketRunner = new PeerSocketRunnable(this, (String)peerInfo.get("ip"), (Integer)peerInfo.get("port"));
 	        (new Thread(this.socketRunner)).start();
 	        this.socketRunner.sendMessage(this.createHandshake());
+            this.lastMessage = System.currentTimeMillis();
 
 	        while (running && !die) {
+                if ((System.currentTimeMillis() - this.lastMessage) > 120000) {
+                    this.socketRunner.sendMessage(ByteBuffer.wrap(KEEP_ALIVE));
+                }
 		        Thread.sleep(10);
 		        ByteBuffer msg = messages.poll();
 		        if (msg != null) {
@@ -188,7 +188,6 @@ public class Peer implements Runnable {
         } catch (InterruptedException e) {
 	        e.printStackTrace();
         }
-
     }
 
     public void stop() {
@@ -319,7 +318,6 @@ public class Peer implements Runnable {
 	public void recvMessage(ByteBuffer msg) {
 		messages.add(msg);
 	}
-
 
     /**
      * Creates the peer handshake
