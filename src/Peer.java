@@ -70,6 +70,7 @@ public class Peer implements Runnable {
 				int len = 0;
 				byte[] buffer = new byte[(2<<13)*2];
 				while (running) {
+					Thread.sleep(10);
 					if (inputStream.available() > 0) { // We have bytes to read...
 						len = inputStream.read(buffer);
 						ByteBuffer msgBuf = ByteBuffer.allocate(len);
@@ -82,11 +83,17 @@ public class Peer implements Runnable {
 						outputStream.write(msg.array());
 					}
 				}
-				sock.close();
 			} catch (IOException e) {
 				e.printStackTrace();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			} finally {
+				try { // Thanks, Java.
+					sock.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
 			}
-
 		}
 
 		public void sendMessage(ByteBuffer msg) {
