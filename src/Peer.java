@@ -47,8 +47,8 @@ public class Peer implements Runnable {
 
 
 	private ConcurrentLinkedQueue<ByteBuffer> messages = new ConcurrentLinkedQueue<ByteBuffer>();
-	private class PeerSocketRunnable implements Runnable {
 
+	private class PeerSocketRunnable implements Runnable {
 		private Peer p;
 		private Socket sock;
 		private String ip;
@@ -131,19 +131,26 @@ public class Peer implements Runnable {
 			}
 		}
 
+        /**
+         * Used to add a message to the peer socket runnables queue.
+         * Also updates the time of last message sent.
+         *
+         * @param msg message to add to the queue
+         */
 		public void sendMessage(ByteBuffer msg) {
             p.lastMessage = System.currentTimeMillis();
 			messages.add(msg);
 		}
 
+        /**
+         * Used to kill the runnable
+         */
 		public void shutdown() {
 			running = false;
 		}
 	}
 
 	private PeerSocketRunnable socketRunner;
-
-	private Socket sock;
 
     public Peer(HashMap<String, Object> peerInfo, Torrent owner, ByteBuffer infoHash, ByteBuffer peerId) {
         this.peerInfo = peerInfo;
@@ -154,7 +161,7 @@ public class Peer implements Runnable {
     }
 
     /**
-     * TODO: Document this
+     * Run loop for the peer
      */
     @Override
     public void run() {
@@ -190,10 +197,18 @@ public class Peer implements Runnable {
         }
     }
 
+    /**
+     * Used to kill the peer
+     */
     public void stop() {
 	    running = false;
     }
 
+    /**
+     * Handles the piece of the torrent. Responsible for getting slices
+     * to download.
+     *
+     */
 	public void handlePiece  () {
 		if (pieceState == null) { // We haven't worked with this piece yet.
 			if (state == PeerState.CHOKED) {
@@ -215,6 +230,12 @@ public class Peer implements Runnable {
 		}
 	}
 
+    /**
+     * Receives a message from the queue and acts with it. Is used
+     * to communicate with peers.
+     *
+     * @param message A message from this peer's message queue
+     */
 	public void handleMessage(ByteBuffer message) {
 		if (state == PeerState.HANDSHAKE) {
 			System.out.println("Hand shaken.");
@@ -315,6 +336,11 @@ public class Peer implements Runnable {
 		}
 	}
 
+    /**
+     * Add a message to the queue of this peer
+     *
+     * @param msg message to add
+     */
 	public void recvMessage(ByteBuffer msg) {
 		messages.add(msg);
 	}
@@ -358,6 +384,11 @@ public class Peer implements Runnable {
 	    return false;
     }
 
+    /**
+     * Set a piece to be downloaded
+     *
+     * @param piece piece of the torrent to download
+     */
 	public void getPiece(Piece piece) {
 		pieceState = null;
 		currentPiece = piece;
