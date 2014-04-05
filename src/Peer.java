@@ -2,6 +2,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.BitSet;
 import java.util.HashMap;
@@ -97,6 +98,7 @@ public class Peer implements Runnable {
 								ByteBuffer msgBuf = ByteBuffer.allocate(68);
 								msgBuf.put(writingBuffer);
 								msgBuf.flip();
+								msgBuf.position(0);
 								writingBuffer.limit(ol);
 								writingBuffer.compact();
 
@@ -230,7 +232,7 @@ public class Peer implements Runnable {
 				socketRunner.sendMessage(buf);
 				state = PeerState.DOWNLOADING;
 				pieceState = "Downloading";
-				System.out.println("Unchoke and interested");
+				System.out.println(peerInfo.get("peer id") + " Unchoke and interested");
 			}
 		}
 	}
@@ -269,10 +271,15 @@ public class Peer implements Runnable {
 //		for (int jj = 0; jj < message.limit(); jj++) {
 //			System.out.print(String.format("%02X",message.array()[jj]));
 //		}
-		System.out.println("");
+//		System.out.println("");
 		int len = message.getInt();
 		if (len == 0) return; // Keepalive
-		byte type = message.get();
+		byte type = 0;
+		try {
+			type = message.get();
+		} catch (BufferUnderflowException e) {
+			e.printStackTrace();
+		}
 		switch (type) {
 			// TODO: Switch to constants
 			case 0: // Choke
@@ -280,14 +287,14 @@ public class Peer implements Runnable {
 				state = PeerState.CHOKED;
 				break;
 			case 1: // Unchoke
-				System.out.println("Unchoke.");
+				System.out.println(peerInfo.get("peer id") + " Unchoke.");
 				state = PeerState.UNCHOKED;
 				// TODO: WHAT. THE. FUCK.
 				if (pieceState == "Interested") { // Always should...
 					int slice = currentPiece.getNextSlice();
 					if (slice == -1) {
 // TODO: Raise an exception, maybe?
-						System.out.println("Starting a piece and there are no slices... Error?");
+						System.out.println(peerInfo.get("peer id") + " Starting a piece and there are no slices... Error?");
 						currentPiece = null;
 						break;
 					}
@@ -298,13 +305,13 @@ public class Peer implements Runnable {
 				}
 				break;
 			case 2: // Interested
-				System.out.println("They want our body.");
+				System.out.println(peerInfo.get("peer id") + " They want our body.");
 				break;
 			case 3: // Uninterested
-				System.out.println("We need the gym.");
+				System.out.println(peerInfo.get("peer id") + " We need the gym.");
 				break;
 			case 4: // Have
-				System.out.println("They got something.");
+				System.out.println(peerInfo.get("peer id") + " They got something.");
 				break;
 			case 5: // Bitfield
 				len -= 1;
@@ -318,10 +325,10 @@ public class Peer implements Runnable {
 				}
 				break;
 			case 6: // Request
-				System.out.println("They want our data.  We don't want to give it.  Because negative ratios are pro.");
+				System.out.println(peerInfo.get("peer id") + " They want our data.  We don't want to give it.  Because negative ratios are pro.");
 				break;
 			case 7: // Piece
-				System.out.println("Incoming data.");
+				System.out.println(peerInfo.get("peer id") + " Incoming data.");
 				ByteBuffer pieceBuffer = currentPiece.getByteBuffer();
 				int idx = message.getInt();
 				int begin = message.getInt();
@@ -330,7 +337,7 @@ public class Peer implements Runnable {
 
 				int slice = currentPiece.getNextSlice();
 				if (slice == -1) { // We've gotten all of the slices already.  So, we're done! Yay.
-					System.out.println("All done with this piece.");
+					System.out.println(peerInfo.get("peer id") + " All done with this piece.");
 					currentPiece.getOwner().putPiece(currentPiece);
 					currentPiece = null;
 					state = PeerState.UNCHOKED;
@@ -412,7 +419,7 @@ public class Peer implements Runnable {
 	 * @return
 	 */
 	public ByteBuffer getRequestMessage(int index, int begin, int length) {
-		System.out.println("Req: " + index + " " + begin + " " + length);
+//		System.out.println("Req: " + index + " " + begin + " " + length);
 		ByteBuffer bb = ByteBuffer.allocate(17);
 		bb.put(REQUEST);
 		bb.putInt(index);

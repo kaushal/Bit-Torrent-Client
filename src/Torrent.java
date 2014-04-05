@@ -75,10 +75,11 @@ public class Torrent implements Runnable {
 //				if (((String)p.get("peer id")).startsWith("RUBT") && p.get("ip").equals("128.6.171.130")) {
 					Peer pr = new Peer(p, this, this.torrentInfo.info_hash, ByteBuffer.wrap(this.peerId.getBytes()));
 					freePeers.add(pr);
-					(new Thread(pr)).start();
 				}
 			}
 			dataFile = new RandomAccessFile(this.fileName,"rw");
+			for (Peer pr : freePeers)
+				(new Thread(pr)).start();
 			fileByteBuffer = dataFile.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, (Integer)torrentInfo.info_map.get(TorrentInfo.KEY_LENGTH));
 
 			while (true) {
@@ -178,6 +179,7 @@ public class Torrent implements Runnable {
 				fileByteBuffer.position(piece.getIndex() * torrentInfo.piece_length);
 				fileByteBuffer.put(piece.getByteBuffer());
 			} else {
+				System.out.println("Piece " + piece.getIndex() + " failed.");
 				piece.clearSlices();
 				pieces.add(piece);
 			}
