@@ -24,10 +24,10 @@ import java.util.Random;
  */
 public class Torrent implements Runnable {
 
-    private TorrentInfo torrentInfo;
-    private ArrayList<Piece> pieces;
+	private TorrentInfo torrentInfo;
+	private ArrayList<Piece> pieces;
 	private ArrayList<Piece> busyPieces = new ArrayList<Piece>();
-    private String encodedInfoHash;
+	private String encodedInfoHash;
 	private RandomAccessFile dataFile;
 	private MappedByteBuffer fileByteBuffer;
 	private HashMap<String,Object> infoMap;
@@ -35,6 +35,7 @@ public class Torrent implements Runnable {
 	private ArrayList<Peer> freePeers = new ArrayList<Peer>();
 	private HashMap<Piece,Peer> busyPeers = new HashMap<Piece, Peer>();
 
+	private final Object fileLock = new Object();
 	private final Object runLock = new Object();
 	private boolean running = true;
 
@@ -44,101 +45,106 @@ public class Torrent implements Runnable {
 	private int left = 0;
 	private String fileName;
 
-    public Torrent(TorrentInfo ti, String fileName) {
-        this.torrentInfo = ti;
-        this.fileName = fileName;
-        this.encodedInfoHash = encodeInfoHash(this.torrentInfo.info_hash.array());
-	    this.peerId = generateId();
-	    this.pieces = generatePieces();
-	    this.left = ti.file_length;
-    }
+	public Torrent(TorrentInfo ti, String fileName) {
+		this.torrentInfo = ti;
+		this.fileName = fileName;
+		this.encodedInfoHash = encodeInfoHash(this.torrentInfo.info_hash.array());
+		this.peerId = generateId();
+		this.pieces = generatePieces();
+		this.left = ti.file_length;
+	}
 
-    /**
-     * Used by the RUBTClient to stop the torrent run loop
-     */
+	/**
+	 * Used by the RUBTClient to stop the torrent run loop
+	 */
 	public void stop() {
 		synchronized (runLock) {
 			running = false;
 		}
 	}
 
-    /**
-     * TODO: Document this
-     */
-    @Override
-    public void run() {
-	    try {
-		    ArrayList<HashMap<String,Object>> tmp_peers = getPeers();
-		    for (HashMap<String,Object> p : tmp_peers) {
-			    if (((String)p.get("peer id")).startsWith("RUBT") && p.get("ip").equals("128.6.171.130")) {
-				    Peer pr = new Peer(p,this,this.torrentInfo.info_hash,ByteBuffer.wrap(this.peerId.getBytes()));
-				    freePeers.add(pr);
-			        (new Thread(pr)).start();
-			    }
-		    }
-		    dataFile = new RandomAccessFile(this.fileName,"rw");
-		    fileByteBuffer = dataFile.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, (Integer)torrentInfo.info_map.get(TorrentInfo.KEY_LENGTH));
+	/**
+	 * TODO: Document this
+	 */
+	@Override
+	public void run() {
+		try {
+			ArrayList<HashMap<String,Object>> tmp_peers = getPeers();
+			for (HashMap<String,Object> p : tmp_peers) {
+				if (p.get("ip").equals("128.6.171.130") || p.get("ip").equals("128.6.171.131")) {
+//				if (((String)p.get("peer id")).startsWith("RUBT") && p.get("ip").equals("128.6.171.130")) {
+					Peer pr = new Peer(p, this, this.torrentInfo.info_hash, ByteBuffer.wrap(this.peerId.getBytes()));
+					freePeers.add(pr);
+					(new Thread(pr)).start();
+				}
+			}
+			dataFile = new RandomAccessFile(this.fileName,"rw");
+			fileByteBuffer = dataFile.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, (Integer)torrentInfo.info_map.get(TorrentInfo.KEY_LENGTH));
 
-		    while (true) {
-			    synchronized (runLock) {
-				    if (!running) {
-					    break;
-				    }
-			    }
-			    synchronized (fileLock) {
-				  if (busyPieces.size() == 0 && pieces.size() == 0) {
-					  sendCompleteEvent();
-					  break;
-				  }
-			    }
-			    ArrayList<Peer> tmpPeers = new ArrayList<Peer>();
-			    synchronized (freePeers) {
-				    for (Peer p : freePeers) {
-					    Piece piece = null;
-					    for (Piece pc: pieces) {
-						    if (p.canGetPiece(pc.getIndex())) {
-							    piece = pc;
-							    break;
-						    }
-					    }
-					    if (piece == null)
-						    continue;
-					    synchronized (fileLock) {
-						    pieces.remove(piece);
-						    busyPieces.add(piece);
-						    p.getPiece(piece);
-						    tmpPeers.add(p);
-						    busyPeers.put(piece, p);
-					    }
-				    }
-				    for (Peer p : tmpPeers) {
-					    freePeers.remove(p);
-				    }
-			    }
-		    }
-	    } catch (FileNotFoundException e) {
-		    e.printStackTrace();
-	    } catch (IOException e) {
-		    e.printStackTrace();
-	    } catch (BencodingException e) {
-		    e.printStackTrace();
-	    } finally {
-            synchronized (fileLock) {
-                try {
-	                if (dataFile != null) dataFile.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-                fileByteBuffer = null;
-            }
-            for (Peer p : freePeers) {
-                p.stop();
-            }
-            for (Peer p : busyPeers.values()) {
-                p.stop();
-            }
-        }
-    }
+			while (true) {
+				synchronized (runLock) {
+					if (!running) {
+						break;
+					}
+				}
+
+				// We're done.  No pieces to download and no pieces downloading.
+				synchronized (fileLock) {
+					if (busyPieces.size() == 0 && pieces.size() == 0) {
+						sendCompleteEvent();
+						break;
+					}
+				}
+
+
+				ArrayList<Peer> tmpPeers = new ArrayList<Peer>();
+				synchronized (freePeers) {
+					for (Peer p : freePeers) {
+						Piece piece = null;
+						for (Piece pc: pieces) {
+							if (p.canGetPiece(pc.getIndex())) {
+								piece = pc;
+								break;
+							}
+						}
+						if (piece == null)
+							continue;
+						synchronized (fileLock) {
+							pieces.remove(piece);
+							busyPieces.add(piece);
+							p.getPiece(piece);
+							tmpPeers.add(p);
+							busyPeers.put(piece, p);
+						}
+					}
+					for (Peer p : tmpPeers) {
+						freePeers.remove(p);
+					}
+				}
+			}
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		} catch (BencodingException e) {
+			e.printStackTrace();
+		} finally {
+			synchronized (fileLock) {
+				try {
+					if (dataFile != null) dataFile.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+				fileByteBuffer = null;
+			}
+			for (Peer p : freePeers) {
+				p.stop();
+			}
+			for (Peer p : busyPeers.values()) {
+				p.stop();
+			}
+		}
+	}
 
 	public void peerDying(Peer p) {
 		System.out.println("Peer " + p + " died. Sadface.");
@@ -151,13 +157,12 @@ public class Torrent implements Runnable {
 		}
 	}
 
-	private final Object fileLock = new Object();
 
-    /**
-     * Write the piece data to the piece buffer
-     *
-     * @param piece A piece object representation to be added
-     */
+	/**
+	 * Write the piece data to the piece buffer
+	 *
+	 * @param piece A piece object representation to be added
+	 */
 	public void putPiece(Piece piece) {
 		MessageDigest md = null;
 		try {
@@ -172,7 +177,7 @@ public class Torrent implements Runnable {
 			if (Arrays.equals(sha1,piece.getHash())) {
 				fileByteBuffer.position(piece.getIndex() * torrentInfo.piece_length);
 				fileByteBuffer.put(piece.getByteBuffer());
-	        } else {
+			} else {
 				piece.clearSlices();
 				pieces.add(piece);
 			}
@@ -184,12 +189,12 @@ public class Torrent implements Runnable {
 		}
 	}
 
-    /**
-     * Calculates and creates an arraylist of pieces to be downloaded
-     * for a given torrent
-     *
-     * @return An arraylist of pieces
-     */
+	/**
+	 * Calculates and creates an arraylist of pieces to be downloaded
+	 * for a given torrent
+	 *
+	 * @return An arraylist of pieces
+	 */
 	private ArrayList<Piece> generatePieces() {
 		ArrayList<Piece> al = new ArrayList<Piece>();
 		int total = torrentInfo.file_length;
@@ -199,11 +204,11 @@ public class Torrent implements Runnable {
 		return al;
 	}
 
-    /**
-     * Generates a peer id with prefix EWOK
-     *
-     * @return A peer id as a string
-     */
+	/**
+	 * Generates a peer id with prefix EWOK
+	 *
+	 * @return A peer id as a string
+	 */
 	private String generateId() {
 		StringBuilder finalString = new StringBuilder(20).append("EWOK");
 		Random rng = new Random(System.currentTimeMillis());
@@ -214,68 +219,68 @@ public class Torrent implements Runnable {
 	}
 
 
-    /**
-     * Talks to the tracker and gets peers
-     *
-     * @return ArrayList of peers from tracker
-     */
-    @SuppressWarnings("unchecked")
-    public ArrayList<HashMap<String,Object>> getPeers() throws IOException, BencodingException {
+	/**
+	 * Talks to the tracker and gets peers
+	 *
+	 * @return ArrayList of peers from tracker
+	 */
+	@SuppressWarnings("unchecked")
+	public ArrayList<HashMap<String,Object>> getPeers() throws IOException, BencodingException {
 		/*
 		 * URL Encode the infoHash
 		 */
-        URL url = new URL(this.torrentInfo.announce_url.toString() +
-		        "?info_hash=" + this.encodedInfoHash +
-		        "&peer_id=" + peerId +
-		        "&port="+port+
-		        "&uploaded="+uploaded+
-		        "&downloaded="+downloaded+
-		        "&left="+left); // TODO: Add start event
-        HttpURLConnection con = (HttpURLConnection) url.openConnection();
+		URL url = new URL(this.torrentInfo.announce_url.toString() +
+				"?info_hash=" + this.encodedInfoHash +
+				"&peer_id=" + peerId +
+				"&port=" + port +
+				"&uploaded=" + uploaded +
+				"&downloaded=" + downloaded +
+				"&left=" + left); // TODO: Add start event
+		HttpURLConnection con = (HttpURLConnection) url.openConnection();
 
-	    DataInputStream dis = new DataInputStream(con.getInputStream());
-	    ByteArrayOutputStream baos = new ByteArrayOutputStream(); // Like a baos
+		DataInputStream dis = new DataInputStream(con.getInputStream());
+		ByteArrayOutputStream baos = new ByteArrayOutputStream(); // Like a baos
 
-        int reads = dis.read();
-        while (reads != -1) {
-            baos.write(reads);
-            reads = dis.read();
-        }
-        dis.close();
-	    System.out.println("Decode:" + new String(baos.toByteArray()));
-        HashMap<String,Object> res = (HashMap<String,Object>)BencodeWrapper.decode(baos.toByteArray());
-	    return (ArrayList<HashMap<String,Object>>)res.get("peers");
-    }
+		int reads = dis.read();
+		while (reads != -1) {
+			baos.write(reads);
+			reads = dis.read();
+		}
+		dis.close();
+		System.out.println("Decode:" + new String(baos.toByteArray()));
+		HashMap<String,Object> res = (HashMap<String,Object>)BencodeWrapper.decode(baos.toByteArray());
+		return (ArrayList<HashMap<String,Object>>)res.get("peers");
+	}
 
-    /**
-     * Makes a get request to the tracker to let it know that
-     * we have finished downloading the torrent
-     *
-     * @throws IOException
-     */
-    public void sendCompleteEvent() throws IOException {
-        URL url = new URL(this.torrentInfo.announce_url.toString() +
-                "?info_hash=" + this.encodedInfoHash +
-                "&peer_id=" + peerId +
-                "&port="+port+
-                "&uploaded="+uploaded+
-                "&downloaded="+torrentInfo.file_length+
-                "&left=0"+
-                "&event=completed");
-        HttpURLConnection con = (HttpURLConnection) url.openConnection();
-    }
+	/**
+	 * Makes a get request to the tracker to let it know that
+	 * we have finished downloading the torrent
+	 *
+	 * @throws IOException
+	 */
+	public void sendCompleteEvent() throws IOException {
+		URL url = new URL(this.torrentInfo.announce_url.toString() +
+				"?info_hash=" + this.encodedInfoHash +
+				"&peer_id=" + peerId +
+				"&port="+port+
+				"&uploaded="+uploaded+
+				"&downloaded="+torrentInfo.file_length+
+				"&left=0"+
+				"&event=completed");
+		HttpURLConnection con = (HttpURLConnection) url.openConnection();
+	}
 
-    /**
-     * URL encodes the infohash byte array
-     *
-     * @param infoHashByteArray Byte array from torrent file
-     * @return The encoded infohash as a string
-     */
-    private String encodeInfoHash(byte[] infoHashByteArray) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < infoHashByteArray.length; i++) {
-            sb.append(String.format("%%%02X", infoHashByteArray[i]));
-        }
-        return sb.toString();
-    }
+	/**
+	 * URL encodes the infohash byte array
+	 *
+	 * @param infoHashByteArray Byte array from torrent file
+	 * @return The encoded infohash as a string
+	 */
+	private String encodeInfoHash(byte[] infoHashByteArray) {
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < infoHashByteArray.length; i++) {
+			sb.append(String.format("%%%02X", infoHashByteArray[i]));
+		}
+		return sb.toString();
+	}
 }

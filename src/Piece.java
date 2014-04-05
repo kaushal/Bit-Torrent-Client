@@ -8,8 +8,8 @@ import java.util.BitSet;
  * @author wlangford
  */
 public class Piece {
-    private int index;
-    private int size;
+	private int index;
+	private int size;
 	private byte[] hash;
 	private Torrent owner;
 	private BitSet slices;
@@ -21,7 +21,7 @@ public class Piece {
 		this.index = index;
 		this.size = size;
 		this.data = new byte[size];
-		this.slices = new BitSet((size + (2<<13) - 1)/(2<<13)); // Round up.
+		this.slices = new BitSet((size + (2<<13) - 1)/(2<<13)); // Ceiling(size/sliceSize)
 		slices.clear();
 	}
 
@@ -54,7 +54,11 @@ public class Piece {
 	}
 	public int getNextSlice() {
 		int slice = slices.nextClearBit(0);
-		if (slice >= (size + (2<<13) - 1)/(2<<13)) return -1; // Round up.
+
+		// If we've gotten all the pieces, return -1
+		if (slice >= (size + (2<<13) - 1)/(2<<13)) // Ceiling(size/sliceSize)
+			return -1;
+
 		return slice;
 	}
 }
