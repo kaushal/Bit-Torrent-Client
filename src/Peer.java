@@ -20,6 +20,7 @@ public class Peer implements Runnable {
 	public enum PeerState {
 		BEGIN, HANDSHAKE, CHOKED, UNCHOKED, DOWNLOADING
 	}
+	private final Object debugLock = new Object();
 	private final String PROTOCOL_HEADER = "BitTorrent protocol";
 	private final byte[] KEEP_ALIVE = new byte[]{0,0,0,0};
 	private final byte[] CHOKE = new byte[]{0,0,0,1,0};
@@ -56,6 +57,8 @@ public class Peer implements Runnable {
 		private int port;
 
 		private ConcurrentLinkedQueue<ByteBuffer> messages = new ConcurrentLinkedQueue<ByteBuffer>();
+		private byte[] buffer = new byte[2<<14];
+
 
 		public PeerSocketRunnable(Peer p, String ip, int port) {
 			this.p = p;
@@ -70,8 +73,8 @@ public class Peer implements Runnable {
 					OutputStream outputStream = sock.getOutputStream();
 					InputStream inputStream = sock.getInputStream();
 					int len = 0;
-					byte[] buffer = new byte[(2<<13)*2];
 					ByteBuffer writingBuffer = ByteBuffer.wrap(buffer);
+					writingBuffer.position(0);
 
 
 					// Since TCP data comes in as a byte stream and not discrete datagrams, we need to reassemble
@@ -106,17 +109,32 @@ public class Peer implements Runnable {
 								p.recvMessage(msgBuf);
 							}
 						} else {
-							len = ByteBuffer.wrap(buffer).getInt()+4;
-							while (writingBuffer.position() >= len) { // We have a full message now!
+							while (writingBuffer.position() >= (len = ByteBuffer.wrap(buffer).getInt()+4)) { // We have a full message now!
+								ByteBuffer msgBuf;
+//								synchronized (debugLock) {
+//								System.out.print(""+writingBuffer.position()+":"+writingBuffer.limit()+":");
+//								for (int jj = 0; jj < (2<<4); jj++) {
+//									if (jj % 4 == 0) System.out.print(" ");
+//									System.out.print(String.format("%02X",writingBuffer.array()[jj]));
+//								}
+//								System.out.print(" -> ");
 								int ol = writingBuffer.position();
 								writingBuffer.position(len).flip();
-								ByteBuffer msgBuf = ByteBuffer.allocate(len);
+								msgBuf = ByteBuffer.allocate(len);
 								msgBuf.put(writingBuffer);
 								msgBuf.flip();
 
 								writingBuffer.limit(ol);
 								writingBuffer.compact();
+//								System.out.print(""+writingBuffer.position()+":"+writingBuffer.limit()+":");
+//								for (int jj = 0; jj < (2<<4); jj++) {
+//									if (jj % 4 == 0) System.out.print(" ");
+//									System.out.print(String.format("%02X",writingBuffer.array()[jj]));
+//								}
+//								System.out.println("");
 								p.recvMessage(msgBuf);
+//								}
+
 							}
 						}
 					}
@@ -244,6 +262,7 @@ public class Peer implements Runnable {
 	 * @param message A message from this peer's message queue
 	 */
 	public void handleMessage(ByteBuffer message) {
+//		synchronized (debugLock) {
 		if (state == PeerState.HANDSHAKE) {
 			System.out.println("Hand shaken.");
 			if (message.get() != 19 || ((ByteBuffer)message.slice().limit(19)).compareTo(ByteBuffer.wrap(PROTOCOL_HEADER.getBytes())) != 0) { // Not BT
@@ -266,7 +285,7 @@ public class Peer implements Runnable {
 				handleMessage(message);
 			}
 			return;
-		}
+//		}
 //		System.out.print("Message: " + message.position() + " : " + message.limit() + " : ");
 //		for (int jj = 0; jj < message.limit(); jj++) {
 //			System.out.print(String.format("%02X",message.array()[jj]));
@@ -289,8 +308,8 @@ public class Peer implements Runnable {
 			case 1: // Unchoke
 				System.out.println(peerInfo.get("peer id") + " Unchoke.");
 				state = PeerState.UNCHOKED;
-				// TODO: WHAT. THE. FUCK.
-				if (pieceState == "Interested") { // Always should...
+//				if (pieceState == "Interested") { // Always should...
+				{
 					int slice = currentPiece.getNextSlice();
 					if (slice == -1) {
 // TODO: Raise an exception, maybe?
@@ -349,6 +368,7 @@ public class Peer implements Runnable {
 
 			default:
 				// Shouldn't happen...
+		}
 		}
 	}
 
