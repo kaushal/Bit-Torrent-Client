@@ -1,3 +1,5 @@
+import edu.rutgers.cs.cs352.bt.exceptions.BencodingException;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
