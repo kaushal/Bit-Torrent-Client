@@ -285,7 +285,7 @@ public class Peer implements Runnable {
 				handleMessage(message);
 			}
 			return;
-//		}
+		}
 //		System.out.print("Message: " + message.position() + " : " + message.limit() + " : ");
 //		for (int jj = 0; jj < message.limit(); jj++) {
 //			System.out.print(String.format("%02X",message.array()[jj]));
@@ -368,7 +368,7 @@ public class Peer implements Runnable {
 
 			default:
 				// Shouldn't happen...
-		}
+//		}
 		}
 	}
 
