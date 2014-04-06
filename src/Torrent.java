@@ -75,7 +75,6 @@ public class Torrent implements Runnable {
 //				if (((String)p.get("peer id")).startsWith("RUBT") && p.get("ip").equals("128.6.171.130")) {
 					Peer pr = new Peer(p, this, this.torrentInfo.info_hash, ByteBuffer.wrap(this.peerId.getBytes()));
 					freePeers.add(pr);
-					break;
 				}
 			}
 			dataFile = new RandomAccessFile(this.fileName,"rw");

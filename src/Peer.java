@@ -1,12 +1,9 @@
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
-import java.nio.channels.SocketChannel;
 import java.util.BitSet;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -19,10 +16,9 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * @author wlangford
  * @author kaushal 
  */
-public class Peer extends Messager implements Runnable, NetworkClient {
-
+public class Peer implements Runnable {
 	public enum PeerState {
-		CONNECTING, BEGIN, HANDSHAKE, CHOKED, UNCHOKED, DOWNLOADING
+		BEGIN, HANDSHAKE, CHOKED, UNCHOKED, DOWNLOADING
 	}
 	private final Object debugLock = new Object();
 	private final String PROTOCOL_HEADER = "BitTorrent protocol";
@@ -52,129 +48,179 @@ public class Peer extends Messager implements Runnable, NetworkClient {
 	private Piece currentPiece = null;
 
 
-	private SocketChannel channel;
+	private ConcurrentLinkedQueue<ByteBuffer> messages = new ConcurrentLinkedQueue<ByteBuffer>();
 
-	public Peer(HashMap<String, Object> peerInfo, Torrent owner, ByteBuffer infoHash, ByteBuffer peerId) throws IOException {
+	private class PeerSocketRunnable implements Runnable {
+		private Peer p;
+		private Socket sock;
+		private String ip;
+		private int port;
+
+		private ConcurrentLinkedQueue<ByteBuffer> messages = new ConcurrentLinkedQueue<ByteBuffer>();
+		private byte[] buffer = new byte[2<<14];
+
+
+		public PeerSocketRunnable(Peer p, String ip, int port) {
+			this.p = p;
+			this.ip = ip;
+			this.port = port;
+		}
+
+		@Override
+			public void run() {
+				try {
+					sock = new Socket(ip,port);
+					OutputStream outputStream = sock.getOutputStream();
+					InputStream inputStream = sock.getInputStream();
+					int len = 0;
+					ByteBuffer writingBuffer = ByteBuffer.wrap(buffer);
+					writingBuffer.position(0);
+
+
+					// Since TCP data comes in as a byte stream and not discrete datagrams, we need to reassemble
+					// coherent messages.  This loop handles that.  buffer is responsible for data storage and is sufficiently
+					// large for any messages it may receive.  Since the handshake doesn't match the rest of the protocol,
+					// it is handled separately.
+					while (running) {
+						Thread.sleep(10);
+						ByteBuffer msg = messages.poll();
+						if (msg != null) { // We have a message to send.
+							outputStream.write(msg.array());
+						}
+						if (inputStream.available() > 0) { // We have bytes to read...
+							byte[] tbuf = new byte[1024];
+							len = inputStream.read(tbuf);
+							writingBuffer.put(tbuf, 0, len);
+						}
+						if (writingBuffer.position() <= 4) continue; // Not enough to do anything yet...
+						if (p.state == PeerState.HANDSHAKE) {
+							// Handshake is a bit different
+							if (writingBuffer.position() >= 68) { // Handshake is complete.
+								int ol = writingBuffer.position();
+								writingBuffer.position(68).flip(); // Grab the first 68 bytes.
+								ByteBuffer msgBuf = ByteBuffer.allocate(68);
+								msgBuf.put(writingBuffer);
+								msgBuf.flip();
+								msgBuf.position(0);
+								writingBuffer.limit(ol);
+								writingBuffer.compact();
+
+								// Pass the message to the Peer object.
+								p.recvMessage(msgBuf);
+							}
+						} else {
+							while (writingBuffer.position() >= 4 && writingBuffer.position() >= (len = ByteBuffer.wrap(buffer).getInt()+4)) { // We have a full message now!
+								ByteBuffer msgBuf;
+//								synchronized (debugLock) {
+//								System.out.print(""+writingBuffer.position()+":"+writingBuffer.limit()+":");
+//								for (int jj = 0; jj < (2<<4); jj++) {
+//									if (jj % 4 == 0) System.out.print(" ");
+//									System.out.print(String.format("%02X",writingBuffer.array()[jj]));
+//								}
+//								System.out.print(" -> ");
+								int ol = writingBuffer.position();
+								writingBuffer.position(len).flip();
+								msgBuf = ByteBuffer.allocate(len);
+								msgBuf.put(writingBuffer);
+								msgBuf.flip();
+
+								writingBuffer.limit(ol);
+								writingBuffer.compact();
+//								System.out.print(""+writingBuffer.position()+":"+writingBuffer.limit()+":");
+//								for (int jj = 0; jj < (2<<4); jj++) {
+//									if (jj % 4 == 0) System.out.print(" ");
+//									System.out.print(String.format("%02X",writingBuffer.array()[jj]));
+//								}
+//								System.out.println("");
+								p.recvMessage(msgBuf);
+//								}
+
+							}
+						}
+					}
+				} catch (IOException e) {
+					e.printStackTrace();
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				} finally {
+					try { // Thanks, Java.
+						sock.close();
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
+				}
+			}
+
+		/**
+		 * Used to add a message to the peer socket runnables queue.
+		 * Also updates the time of last message sent.
+		 *
+		 * @param msg message to add to the queue
+		 */
+		public void sendMessage(ByteBuffer msg) {
+			p.lastMessage = System.currentTimeMillis();
+			messages.add(msg);
+		}
+
+		/**
+		 * Used to kill the runnable
+		 */
+		public void shutdown() {
+			running = false;
+		}
+	}
+
+	private PeerSocketRunnable socketRunner;
+
+	public Peer(HashMap<String, Object> peerInfo, Torrent owner, ByteBuffer infoHash, ByteBuffer peerId) {
 		this.peerInfo = peerInfo;
 		this.infoHash = infoHash.duplicate();
 		this.peerId = peerId.duplicate();
 		this.handshake = createHandshake();
 		this.owner = owner;
-		this.channel = SocketChannel.open();
-		this.channel.configureBlocking(false);
-		if (!this.channel.connect(new InetSocketAddress(InetAddress.getByName((String)peerInfo.get("ip")),(Integer)peerInfo.get("port")))) {
-			this.state = PeerState.CONNECTING;
-		}
-		NetworkOperator.getSharedOperator().register(channel, this);
-
-	}
-
-	@Override
-	public void connectable() {
-		try {
-			if (!channel.finishConnect()) {
-				return;
-			}
-		} catch (IOException e) {
-			e.printStackTrace();
-			return;
-		}
-		System.out.println("Connected...");
-		if (this.state == PeerState.CONNECTING)
-			this.state = PeerState.HANDSHAKE;
-
-	}
-
-	private ByteBuffer readBuffer = ByteBuffer.allocate(Piece.SLICE_SIZE * 2);
-	@Override
-	public void readable() throws IOException {
-		System.out.println("Read");
-		channel.read(readBuffer);
-		if (readBuffer.position() <= 4) return;
-		if (state == PeerState.HANDSHAKE) {
-			// Handshake is a bit different
-			if (readBuffer.position() >= 68) { // Handshake is complete.
-				int ol = readBuffer.position();
-				readBuffer.position(68).flip(); // Grab the first 68 bytes.
-				ByteBuffer msgBuf = ByteBuffer.allocate(68);
-				msgBuf.put(readBuffer);
-				msgBuf.flip();
-				msgBuf.position(0);
-				readBuffer.limit(ol);
-				readBuffer.compact();
-
-				recv(msgBuf);
-			}
-		} else {
-			int len;
-			readBuffer.getInt(0);
-			while (readBuffer.position() >= 4 && readBuffer.position() >= (len = ((ByteBuffer)readBuffer.duplicate().position(0)).getInt()+4)) { // We have a full message now!
-				ByteBuffer msgBuf;
-
-				int ol = readBuffer.position();
-				readBuffer.position(len).flip();
-				msgBuf = ByteBuffer.allocate(len);
-				msgBuf.put(readBuffer);
-				msgBuf.flip();
-
-				readBuffer.limit(ol);
-				readBuffer.compact();
-
-				recv(msgBuf);
-			}
-		}
-	}
-
-	private ByteBuffer writeBuffer = null;
-	@Override
-	public void writable() {
-		if (writeBuffer == null) {
-			writeBuffer = outMessages.poll();
-		}
-		if (writeBuffer != null) {
-			System.out.println("W:"+writeBuffer);
-			try {
-				channel.write(writeBuffer);
-				this.lastMessage = System.currentTimeMillis();
-				if (!writeBuffer.hasRemaining())
-					writeBuffer = null;
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-		} else if (System.currentTimeMillis() - this.lastMessage > 105000) {
-			this.send(ByteBuffer.wrap(KEEP_ALIVE));
-		}
-	}
-
-	@Override
-	public void acceptable() {
-		System.out.println("Accepted...");
-
 	}
 
 	/**
 	 * Run loop for the peer
 	 */
 	@Override
-	public void run() {
-		System.out.println("Connecting to peer: " + peerInfo.get("ip") + " : " + peerInfo.get("port"));
-		this.send(this.handshake);
+		public void run() {
+			state = PeerState.HANDSHAKE;
+			try {
+				System.out.println("Connecting to peer: " + peerInfo.get("ip") + " : " + peerInfo.get("port"));
+				this.socketRunner = new PeerSocketRunnable(this, (String)peerInfo.get("ip"), (Integer)peerInfo.get("port"));
+				(new Thread(this.socketRunner)).start();
+				this.socketRunner.sendMessage(this.handshake);
+				this.lastMessage = System.currentTimeMillis();
 
-		while (running && !die) {
+				while (running && !die) {
+					// TODO: Check this time to see if this is already the timeout.
+					// Since this can be delayed due to asynchronous message sending.
+					if ((System.currentTimeMillis() - this.lastMessage) > 120000) {
+						this.socketRunner.sendMessage(ByteBuffer.wrap(KEEP_ALIVE));
+					}
 
-			ByteBuffer msg = inMessages.poll();
-			if (msg != null) {
-				handleMessage(msg);
-			}
-			if (currentPiece != null) {
-				handlePiece();
+					// TODO: See if you can just yield execution?
+					Thread.sleep(10);
+
+					ByteBuffer msg = messages.poll();
+					if (msg != null) {
+						handleMessage(msg);
+					}
+					if (currentPiece != null) {
+						handlePiece();
+					}
+				}
+
+				this.socketRunner.shutdown();
+				if (die) {
+					owner.peerDying(this);
+					return;
+				}
+			} catch (InterruptedException e) {
+				e.printStackTrace();
 			}
 		}
-
-		if (die) {
-			owner.peerDying(this);
-		}
-	}
 
 	/**
 	 * Used to kill the peer
@@ -191,7 +237,7 @@ public class Peer extends Messager implements Runnable, NetworkClient {
 	public void handlePiece() {
 		if (pieceState == null) { // We haven't worked with this piece yet.
 			if (state == PeerState.CHOKED) {
-				send(ByteBuffer.wrap(INTERESTED));
+				socketRunner.sendMessage(ByteBuffer.wrap(INTERESTED));
 				pieceState = "Interested";
 			} else if (state == PeerState.UNCHOKED) {
 				int slice = currentPiece.getNextSlice();
@@ -201,7 +247,7 @@ public class Peer extends Messager implements Runnable, NetworkClient {
 					return;
 				}
 				ByteBuffer buf = getRequestMessage(currentPiece.getIndex(), slice * (Piece.SLICE_SIZE), Math.min(Piece.SLICE_SIZE, currentPiece.getSize() - (slice * Piece.SLICE_SIZE)));
-				send(buf);
+				socketRunner.sendMessage(buf);
 				state = PeerState.DOWNLOADING;
 				pieceState = "Downloading";
 				System.out.println(peerInfo.get("peer id") + " Unchoke and interested");
@@ -272,7 +318,7 @@ public class Peer extends Messager implements Runnable, NetworkClient {
 						break;
 					}
 					ByteBuffer buf = getRequestMessage(currentPiece.getIndex(), slice * (Piece.SLICE_SIZE), Math.min(Piece.SLICE_SIZE, currentPiece.getSize() - (slice * Piece.SLICE_SIZE)));
-					send(buf);
+					socketRunner.sendMessage(buf);
 					state = PeerState.DOWNLOADING;
 					pieceState = "Downloading";
 				}
@@ -318,7 +364,7 @@ public class Peer extends Messager implements Runnable, NetworkClient {
 					state = PeerState.UNCHOKED;
 				} else {
 					ByteBuffer buf = getRequestMessage(currentPiece.getIndex(), slice * (Piece.SLICE_SIZE), Math.min(Piece.SLICE_SIZE, currentPiece.getSize() - (slice * Piece.SLICE_SIZE)));
-					send(buf);
+					socketRunner.sendMessage(buf);
 				}
 				break;
 
@@ -334,7 +380,7 @@ public class Peer extends Messager implements Runnable, NetworkClient {
 	 * @param msg message to add
 	 */
 	public void recvMessage(ByteBuffer msg) {
-		inMessages.add(msg);
+		messages.add(msg);
 	}
 
 	/**
