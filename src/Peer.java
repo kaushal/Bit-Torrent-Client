@@ -109,7 +109,7 @@ public class Peer implements Runnable {
 								p.recvMessage(msgBuf);
 							}
 						} else {
-							while (writingBuffer.position() >= (len = ByteBuffer.wrap(buffer).getInt()+4)) { // We have a full message now!
+							while (writingBuffer.position() >= 4 && writingBuffer.position() >= (len = ByteBuffer.wrap(buffer).getInt()+4)) { // We have a full message now!
 								ByteBuffer msgBuf;
 //								synchronized (debugLock) {
 //								System.out.print(""+writingBuffer.position()+":"+writingBuffer.limit()+":");
