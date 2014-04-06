@@ -332,7 +332,7 @@ public class Peer implements Runnable {
 				System.out.println(peerInfo.get("peer id") + " They want our body.");
                 System.out.println(state);
                 socketRunner.sendMessage(getUnChokeMessage());
-                state = PeerState.UNCHOKED;
+
 				break;
 			case 3: // Not Interested
 				System.out.println(peerInfo.get("peer id") + " We need the gym.");

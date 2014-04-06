@@ -138,12 +138,12 @@ public class Torrent implements Runnable {
 				}
 				fileByteBuffer = null;
 			}
-			/*for (Peer p : freePeers) {
+			for (Peer p : freePeers) {
 				p.stop();
 			}
 			for (Peer p : busyPeers.values()) {
 				p.stop();
-			}*/
+			}
 		}
 	}
 
