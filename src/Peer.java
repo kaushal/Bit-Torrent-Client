@@ -246,7 +246,7 @@ public class Peer implements Runnable {
 					currentPiece = null;
 					return;
 				}
-				ByteBuffer buf = getRequestMessage(currentPiece.getIndex(), slice * (2<<13), Math.min(2<<13, currentPiece.getSize() - (slice * 2<<13)));
+				ByteBuffer buf = getRequestMessage(currentPiece.getIndex(), slice * (Piece.SLICE_SIZE), Math.min(Piece.SLICE_SIZE, currentPiece.getSize() - (slice * Piece.SLICE_SIZE)));
 				socketRunner.sendMessage(buf);
 				state = PeerState.DOWNLOADING;
 				pieceState = "Downloading";
@@ -317,7 +317,7 @@ public class Peer implements Runnable {
 						currentPiece = null;
 						break;
 					}
-					ByteBuffer buf = getRequestMessage(currentPiece.getIndex(), slice * (2<<13), Math.min(2<<13, currentPiece.getSize() - (slice * 2<<13)));
+					ByteBuffer buf = getRequestMessage(currentPiece.getIndex(), slice * (Piece.SLICE_SIZE), Math.min(Piece.SLICE_SIZE, currentPiece.getSize() - (slice * Piece.SLICE_SIZE)));
 					socketRunner.sendMessage(buf);
 					state = PeerState.DOWNLOADING;
 					pieceState = "Downloading";
@@ -354,7 +354,7 @@ public class Peer implements Runnable {
 				int idx = message.getInt();
 				int begin = message.getInt();
 				((ByteBuffer)pieceBuffer.position(begin)).put(message);
-				currentPiece.putSlice(begin/(2<<13));
+				currentPiece.putSlice(begin/(Piece.SLICE_SIZE));
 
 				int slice = currentPiece.getNextSlice();
 				if (slice == -1) { // We've gotten all of the slices already.  So, we're done! Yay.
@@ -363,7 +363,7 @@ public class Peer implements Runnable {
 					currentPiece = null;
 					state = PeerState.UNCHOKED;
 				} else {
-					ByteBuffer buf = getRequestMessage(currentPiece.getIndex(), slice * (2<<13), Math.min(2<<13, currentPiece.getSize() - (slice * 2<<13)));
+					ByteBuffer buf = getRequestMessage(currentPiece.getIndex(), slice * (Piece.SLICE_SIZE), Math.min(Piece.SLICE_SIZE, currentPiece.getSize() - (slice * Piece.SLICE_SIZE)));
 					socketRunner.sendMessage(buf);
 				}
 				break;

@@ -8,6 +8,8 @@ import java.util.BitSet;
  * @author wlangford
  */
 public class Piece {
+
+	public static final int SLICE_SIZE = 2<<13;
 	private int index;
 	private int size;
 	private byte[] hash;
@@ -21,7 +23,7 @@ public class Piece {
 		this.index = index;
 		this.size = size;
 		this.data = new byte[size];
-		this.slices = new BitSet((size + (2<<13) - 1)/(2<<13)); // Ceiling(size/sliceSize)
+		this.slices = new BitSet((size + (SLICE_SIZE) - 1)/(SLICE_SIZE)); // Ceiling(size/sliceSize)
 		slices.clear();
 	}
 
@@ -56,7 +58,7 @@ public class Piece {
 		int slice = slices.nextClearBit(0);
 
 		// If we've gotten all the pieces, return -1
-		if (slice >= (size + (2<<13) - 1)/(2<<13)) // Ceiling(size/sliceSize)
+		if (slice >= (size + (SLICE_SIZE) - 1)/(SLICE_SIZE)) // Ceiling(size/sliceSize)
 			return -1;
 
 		return slice;
