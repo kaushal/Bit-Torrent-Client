@@ -330,7 +330,9 @@ public class Peer implements Runnable {
 				System.out.println(peerInfo.get("peer id") + " We need the gym.");
 				break;
 			case 4: // Have
-				System.out.println(peerInfo.get("peer id") + " They got something.");
+                int msg = message.getInt();
+                System.out.println(peerInfo.get("peer id") + " They have: " + msg);
+                availablePieces.set(msg);
 				break;
 			case 5: // Bitfield
 				len -= 1;
