@@ -482,13 +482,33 @@ public class Peer implements Runnable {
 	 */
 	public ByteBuffer getRequestMessage(int index, int begin, int length) {
 //		System.out.println("Req: " + index + " " + begin + " " + length);
-		ByteBuffer bb = ByteBuffer.allocate(17);
-		bb.put(REQUEST);
-		bb.putInt(index);
-		bb.putInt(begin);
-		bb.putInt(length);
-		return bb;
-	}
+        ByteBuffer bb = ByteBuffer.allocate(17);
+        bb.put(REQUEST);
+        bb.putInt(index);
+        bb.putInt(begin);
+        bb.putInt(length);
+        return bb;
+    }
+
+    public ByteBuffer getPieceMessage(int index, int begin, int length) {
+        ByteBuffer bb = ByteBuffer.allocate(9 + length);
+        bb.put(PIECE);
+        bb.putInt(begin);
+        bb.put(this.currentPiece.getByteBuffer());
+        return bb;
+    }
+
+    public ByteBuffer getUnChokeMessage() {
+        ByteBuffer bb = ByteBuffer.allocate(5);
+        bb.put(UNCHOKE);
+        return bb;
+    }
+
+    public ByteBuffer getChokeMessage() {
+        ByteBuffer bb = ByteBuffer.allocate(5);
+        bb.put(CHOKE);
+        return bb;
+    }
 
 	/**
 	 * Constructs a have message for a peer
@@ -499,7 +519,7 @@ public class Peer implements Runnable {
 	public ByteBuffer getHaveMessage(int index) {
 		ByteBuffer bb = ByteBuffer.allocate(9);
 		bb.put(HAVE);
-		bb.put((byte)index);
+		bb.putInt(index);
 		return bb;
 	}
 }
