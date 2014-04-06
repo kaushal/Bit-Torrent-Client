@@ -87,7 +87,7 @@ public class Peer implements Runnable {
 						Thread.sleep(10);
 						ByteBuffer msg = messages.poll();
 						if (msg != null) { // We have a message to send.
-							outputStream.write(msg.array());
+                                outputStream.write(msg.array());
 						}
 						if (inputStream.available() > 0) { // We have bytes to read...
 							byte[] tbuf = new byte[1024];
@@ -303,8 +303,9 @@ public class Peer implements Runnable {
 		}
 		switch (type) {
 			// TODO: Switch to constants
+            // TODO: do we want to actualy send the chokes???
 			case 0: // Choke
-				System.out.println("Choke.");
+				System.out.println(peerInfo.get("peer id") + "Choke.");
 				state = PeerState.CHOKED;
 				break;
 			case 1: // Unchoke
@@ -326,9 +327,14 @@ public class Peer implements Runnable {
 				}
 				break;
 			case 2: // Interested
+                //step 1
+                //unchoke or nothing
 				System.out.println(peerInfo.get("peer id") + " They want our body.");
+                System.out.println(state);
+                socketRunner.sendMessage(getUnChokeMessage());
+                state = PeerState.UNCHOKED;
 				break;
-			case 3: // Uninterested
+			case 3: // Not Interested
 				System.out.println(peerInfo.get("peer id") + " We need the gym.");
 				break;
 			case 4: // Have
@@ -348,7 +354,21 @@ public class Peer implements Runnable {
 				}
 				break;
 			case 6: // Request
-				System.out.println(peerInfo.get("peer id") + " They want our data.  We don't want to give it.  Because negative ratios are pro.");
+                //request message
+                System.out.println("--------------------------------------------------------------------------------");
+                System.out.println(peerInfo.get("peer id") + " They want our data, and we gon' give it to them");
+
+                int ind = message.getInt();
+                int start = message.getInt();
+                int size = message.getInt();
+
+                if (availablePieces.get(ind)) {
+                    ByteBuffer pieceMessage = getPieceMessage(ind, start, size);
+                    socketRunner.sendMessage(pieceMessage);
+                    socketRunner.sendMessage(getChokeMessage());//check this
+
+                }
+
 				break;
 			case 7: // Piece
 				System.out.println(peerInfo.get("peer id") + " Incoming data.");
