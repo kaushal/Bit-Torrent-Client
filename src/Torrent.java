@@ -32,8 +32,8 @@ public class Torrent implements Runnable {
 	private MappedByteBuffer fileByteBuffer;
 	private HashMap<String,Object> infoMap;
 	private String peerId;
-	private ArrayList<Peer> freePeers = new ArrayList<Peer>();
-	private HashMap<Piece,Peer> busyPeers = new HashMap<Piece, Peer>();
+	public ArrayList<Peer> freePeers = new ArrayList<Peer>();
+	public HashMap<Piece,Peer> busyPeers = new HashMap<Piece, Peer>();
 
 	private final Object fileLock = new Object();
 	private final Object runLock = new Object();
@@ -138,12 +138,12 @@ public class Torrent implements Runnable {
 				}
 				fileByteBuffer = null;
 			}
-			for (Peer p : freePeers) {
+			/*for (Peer p : freePeers) {
 				p.stop();
 			}
 			for (Peer p : busyPeers.values()) {
 				p.stop();
-			}
+			}*/
 		}
 	}
 
