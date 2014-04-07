@@ -37,7 +37,8 @@ public class Torrent implements Runnable {
 	private boolean running = true;
 
 	private int port = 6881;
-	private int uploaded = 0;
+
+    private int uploaded = 0;
 	private int downloaded = 0;
 	private int left = 0;
 	private String fileName;
@@ -83,6 +84,8 @@ public class Torrent implements Runnable {
 				(new Thread(pr)).start();
 			fileByteBuffer = dataFile.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, (Integer)torrentInfo.info_map.get(TorrentInfo.KEY_LENGTH));
 
+            sendStartedEvent();
+
 			while (true) {
 
 				// We don't have all of the pieces yet...
@@ -96,7 +99,8 @@ public class Torrent implements Runnable {
 						}
 						if (done) {
 							sendCompleteEvent();
-						}
+                            System.out.println("Sent complete event");
+                        }
 					}
 
 					// Pick a peer and a piece and download.
@@ -223,7 +227,11 @@ public class Torrent implements Runnable {
 					}
 					for (Peer p : busyPeers.values())
 						p.sendHaveMessage(piece.getIndex());
-				} else {
+                    // Update stats
+                    downloaded += piece.getSize();
+                    left -= piece.getSize();
+                    System.out.println("DOWNLOADED: " + downloaded + " LEFT: " + left + " UPLOADED: " + uploaded);
+                } else {
 					System.out.println("Piece " + piece.getIndex() + " failed.");
 					piece.clearSlices();
 					piece.setState(Piece.PieceState.INCOMPLETE);
@@ -300,6 +308,40 @@ public class Torrent implements Runnable {
 		return (ArrayList<HashMap<String,Object>>)res.get("peers");
 	}
 
+    // info peer port uploaded download left
+    public void sendAnnounce() throws IOException {
+        URL url =  new URL(this.torrentInfo.announce_url.toString() +
+                "?info_hash=" + this.encodedInfoHash +
+                "&peer_id=" + peerId +
+                "&port=" + port +
+                "&uploaded=" + uploaded +
+                "&downloaded=" + downloaded +
+                "&left=" + left);
+        HttpURLConnection con = (HttpURLConnection) url.openConnection();
+        System.out.println("Sent announce event");
+    }
+
+
+    /**
+     * Makes a get request to the tracker to let it know that
+     * we have started downloading the torrent
+     *
+     * @throws IOException
+     */
+    public void sendStartedEvent() throws IOException {
+        URL url = new URL(this.torrentInfo.announce_url.toString() +
+                "?info_hash=" + this.encodedInfoHash +
+                "&peer_id=" + peerId +
+                "&port="+ port +
+                "&uploaded=" + uploaded +
+                "&downloaded=" + downloaded +
+                "&left=" + left +
+                "&event=started");
+        HttpURLConnection con = (HttpURLConnection) url.openConnection();
+        System.out.println("Sent started event");
+    }
+
+
 	/**
 	 * Makes a get request to the tracker to let it know that
 	 * we have finished downloading the torrent
@@ -310,10 +352,10 @@ public class Torrent implements Runnable {
 		URL url = new URL(this.torrentInfo.announce_url.toString() +
 				"?info_hash=" + this.encodedInfoHash +
 				"&peer_id=" + peerId +
-				"&port="+port+
-				"&uploaded="+uploaded+
-				"&downloaded="+torrentInfo.file_length+
-				"&left=0"+
+				"&port="+ port +
+				"&uploaded=" + uploaded +
+				"&downloaded=" + torrentInfo.file_length +
+				"&left=0" +
 				"&event=completed");
 		HttpURLConnection con = (HttpURLConnection) url.openConnection();
 		sentComplete = true;
@@ -332,4 +374,8 @@ public class Torrent implements Runnable {
 		}
 		return sb.toString();
 	}
+
+    public void setUploaded(int uploaded) {
+        this.uploaded += uploaded;
+    }
 }

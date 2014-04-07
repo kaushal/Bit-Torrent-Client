@@ -354,11 +354,11 @@ public class Peer implements Runnable {
                 int start = message.getInt();
                 int size = message.getInt();
 
+                this.owner.setUploaded(size);
                 if (availablePieces.get(ind)) {
                     ByteBuffer pieceMessage = getPieceMessage(ind, start, size);
                     socketRunner.sendMessage(pieceMessage);
                     socketRunner.sendMessage(getChokeMessage()); // check this
-
                 }
 
 				break;
