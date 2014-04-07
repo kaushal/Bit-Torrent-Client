@@ -41,6 +41,8 @@ public class Torrent implements Runnable {
     private int uploaded = 0;
 	private int downloaded = 0;
 	private int left = 0;
+    private int minInterval = 0;
+    private long lastAnnounce = 0;
 	private String fileName;
 	private boolean sentComplete;
 
@@ -76,9 +78,9 @@ public class Torrent implements Runnable {
 				ByteBuffer bb = ByteBuffer.allocate(pc.getSize());
 				bb.put((ByteBuffer) fileByteBuffer.duplicate().position(offset).limit(offset + pc.getSize())).flip();
 				offset += pc.getSize();
-				left -= pc.getSize();
 				sha1 = md.digest(bb.array());
 				if (Arrays.equals(sha1,pc.getHash())) {
+                    left -= pc.getSize();
 					pc.setData(bb);
 					pc.setState(Piece.PieceState.COMPLETE);
 				}
@@ -118,8 +120,13 @@ public class Torrent implements Runnable {
 				(new Thread(pr)).start();
 
             sendStartedEvent();
+            lastAnnounce = System.currentTimeMillis();
 
 			while (true) {
+                if ((System.currentTimeMillis() - lastAnnounce) >= (minInterval - 5000)) {
+                   sendAnnounce();
+                    lastAnnounce = System.currentTimeMillis();
+                }
 
 				// We don't have all of the pieces yet...
 				if (!sentComplete) {
@@ -340,7 +347,8 @@ public class Torrent implements Runnable {
 		dis.close();
 		System.out.println("Decode:" + new String(baos.toByteArray()));
 		HashMap<String,Object> res = (HashMap<String,Object>)BencodeWrapper.decode(baos.toByteArray());
-		return (ArrayList<HashMap<String,Object>>)res.get("peers");
+        minInterval = ((Integer) res.get("min interval")) * 1000;
+        return (ArrayList<HashMap<String,Object>>)res.get("peers");
 	}
 
     // info peer port uploaded download left
