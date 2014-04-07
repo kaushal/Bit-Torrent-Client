@@ -17,7 +17,6 @@ import java.io.IOException;
  */
 public class RUBTClient {
 
-
 	@SuppressWarnings("unchecked")
 	public static void main(String[] args) throws IOException, BencodingException {
 

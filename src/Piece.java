@@ -6,6 +6,7 @@ import java.util.BitSet;
  *
  * @author eddiezane
  * @author wlangford
+ * @author kaushall
  */
 public class Piece {
 	public enum PieceState { INCOMPLETE, DOWNLOADING, COMPLETE};
@@ -18,6 +19,14 @@ public class Piece {
 	private BitSet slices;
 	private byte[] data;
 	private PieceState state = PieceState.INCOMPLETE;
+
+    /**
+     *
+     * @param index
+     * @param size
+     * @param hash
+     * @param ownerTorrent
+     */
 
 	public Piece(int index, int size, ByteBuffer hash, Torrent ownerTorrent) {
 		this.hash = hash.array();
@@ -52,6 +61,11 @@ public class Piece {
 	public void setState(PieceState st) {
 		state = st;
 	}
+
+    /**
+     *
+     * @return
+     */
 
 	public ByteBuffer getByteBuffer() {
 		return ByteBuffer.wrap(data);

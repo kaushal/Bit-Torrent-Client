@@ -9,6 +9,8 @@ import edu.rutgers.cs.cs352.bt.util.Bencoder2;
  * Wrapper around bencode2 class does most of the type casting for us.
  * 
  * @author wlangford
+ * @author eddiezane
+ * @author kaushal
  */
 
 public class BencodeWrapper {

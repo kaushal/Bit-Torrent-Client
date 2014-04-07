@@ -61,9 +61,13 @@ public class Torrent implements Runnable {
 		}
 	}
 
-	/**
-	 * TODO: Document this
-	 */
+    /**
+     *
+     * Main runnable for the thread.
+     * First finds list of peers with supplied ip addressed.
+     * Then enters run loop and ends once we get all the pieces
+     *
+     */
 	@Override
 	public void run() {
 		try {
@@ -83,7 +87,6 @@ public class Torrent implements Runnable {
 
 				// We don't have all of the pieces yet...
 				if (!sentComplete) {
-
 					// Check to see if we have finished...
 					synchronized (fileLock) {
 						boolean done = true;
@@ -159,6 +162,12 @@ public class Torrent implements Runnable {
 		}
 	}
 
+    /**
+     * Callback of sorts when peers die unexpectedly
+     *
+     * @param p
+     */
+
 	public void peerDying(Peer p) {
 		System.out.println("Peer " + p + " died. Sadface.");
 		synchronized (peerLock) {
@@ -175,6 +184,13 @@ public class Torrent implements Runnable {
 			}
 		}
 	}
+
+    /**
+     * Retrieves the piece based on an integer index
+     *
+     * @param index
+     * @return
+     */
 
 	public Piece getPiece(int index) {
 		return pieces.get(index);

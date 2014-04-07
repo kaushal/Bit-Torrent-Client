@@ -52,6 +52,7 @@ public class Peer implements Runnable {
 
 	private ConcurrentLinkedQueue<ByteBuffer> messages = new ConcurrentLinkedQueue<ByteBuffer>();
 
+
 	private class PeerSocketRunnable implements Runnable {
 		private Peer p;
 		private Socket sock;
@@ -62,11 +63,24 @@ public class Peer implements Runnable {
 		private byte[] buffer = new byte[2<<14];
 
 
+        /**
+         *
+         * @param p
+         * @param ip
+         * @param port
+         */
+
 		public PeerSocketRunnable(Peer p, String ip, int port) {
 			this.p = p;
 			this.ip = ip;
 			this.port = port;
 		}
+
+        /**
+         *
+         * Main run loop for Peer thread.
+         *
+         */
 
 		@Override
 			public void run() {
@@ -113,13 +127,6 @@ public class Peer implements Runnable {
 						} else {
 							while (writingBuffer.position() >= 4 && writingBuffer.position() >= (len = ByteBuffer.wrap(buffer).getInt()+4)) { // We have a full message now!
 								ByteBuffer msgBuf;
-//								synchronized (debugLock) {
-//								System.out.print(""+writingBuffer.position()+":"+writingBuffer.limit()+":");
-//								for (int jj = 0; jj < (2<<4); jj++) {
-//									if (jj % 4 == 0) System.out.print(" ");
-//									System.out.print(String.format("%02X",writingBuffer.array()[jj]));
-//								}
-//								System.out.print(" -> ");
 								int ol = writingBuffer.position();
 								writingBuffer.position(len).flip();
 								msgBuf = ByteBuffer.allocate(len);
@@ -128,14 +135,7 @@ public class Peer implements Runnable {
 
 								writingBuffer.limit(ol);
 								writingBuffer.compact();
-//								System.out.print(""+writingBuffer.position()+":"+writingBuffer.limit()+":");
-//								for (int jj = 0; jj < (2<<4); jj++) {
-//									if (jj % 4 == 0) System.out.print(" ");
-//									System.out.print(String.format("%02X",writingBuffer.array()[jj]));
-//								}
-//								System.out.println("");
 								p.recvMessage(msgBuf);
-//								}
 
 							}
 						}
@@ -288,11 +288,6 @@ public class Peer implements Runnable {
 			}
 			return;
 		}
-//		System.out.print("Message: " + message.position() + " : " + message.limit() + " : ");
-//		for (int jj = 0; jj < message.limit(); jj++) {
-//			System.out.print(String.format("%02X",message.array()[jj]));
-//		}
-//		System.out.println("");
 		int len = message.getInt();
 		if (len == 0) return; // Keepalive
 		byte type = 0;
@@ -302,8 +297,6 @@ public class Peer implements Runnable {
 			e.printStackTrace();
 		}
 		switch (type) {
-			// TODO: Switch to constants
-            // TODO: do we want to actualy send the chokes???
 			case 0: // Choke
 				System.out.println(peerInfo.get("peer id") + "Choke.");
 				state = PeerState.CHOKED;
@@ -311,11 +304,10 @@ public class Peer implements Runnable {
 			case 1: // Unchoke
 				System.out.println(peerInfo.get("peer id") + " Unchoke.");
 				state = PeerState.UNCHOKED;
-//				if (pieceState == "Interested") { // Always should...
-				{
+
+                {   // TODO: See if we need this: if (pieceState == "Interested") { // Always should...
 					int slice = currentPiece.getNextSlice();
 					if (slice == -1) {
-// TODO: Raise an exception, maybe?
 						System.out.println(peerInfo.get("peer id") + " Starting a piece and there are no slices... Error?");
 						currentPiece = null;
 						break;
@@ -392,7 +384,6 @@ public class Peer implements Runnable {
 
 			default:
 				// Shouldn't happen...
-//		}
 		}
 	}
 
@@ -406,7 +397,6 @@ public class Peer implements Runnable {
 	}
 
 
-
 	/**
 	 * Add a message to the queue of this peer
 	 *
@@ -415,6 +405,7 @@ public class Peer implements Runnable {
 	public void recvMessage(ByteBuffer msg) {
 		messages.add(msg);
 	}
+
 
 	/**
 	 * Creates the peer handshake
@@ -483,14 +474,28 @@ public class Peer implements Runnable {
         return bb;
     }
 
+    /**
+     *
+     * @param index
+     * @param begin
+     * @param length
+     * @return
+     */
+
     public ByteBuffer getPieceMessage(int index, int begin, int length) {
         ByteBuffer bb = ByteBuffer.allocate(9 + length);
         bb.put(PIECE);
         bb.putInt(begin);
 	    Piece pc = owner.getPiece(index);
+        System.out.println("---------------------------------------sending piece" + index + "-------------------------------------------");
 	    bb.put(pc.getByteBuffer().array(),begin,length);
         return bb;
     }
+
+    /**
+     *
+     * @return
+     */
 
     public ByteBuffer getUnChokeMessage() {
         ByteBuffer bb = ByteBuffer.allocate(5);
@@ -498,11 +503,21 @@ public class Peer implements Runnable {
         return bb;
     }
 
+    /**
+     *
+     * @return
+     */
+
     public ByteBuffer getChokeMessage() {
         ByteBuffer bb = ByteBuffer.allocate(5);
         bb.put(CHOKE);
         return bb;
     }
+
+    /**
+     *
+     * @return
+     */
 
 	public Piece getCurrentPiece() {
 		return this.currentPiece;
