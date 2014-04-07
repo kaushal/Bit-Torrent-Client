@@ -8,6 +8,7 @@ import java.util.BitSet;
  * @author wlangford
  */
 public class Piece {
+	public enum PieceState { INCOMPLETE, DOWNLOADING, COMPLETE};
 
 	public static final int SLICE_SIZE = 2<<13;
 	private int index;
@@ -16,6 +17,7 @@ public class Piece {
 	private Torrent owner;
 	private BitSet slices;
 	private byte[] data;
+	private PieceState state = PieceState.INCOMPLETE;
 
 	public Piece(int index, int size, ByteBuffer hash, Torrent ownerTorrent) {
 		this.hash = hash.array();
@@ -43,17 +45,26 @@ public class Piece {
 		return owner;
 	}
 
+	public PieceState getState() {
+		return state;
+	}
+
+	public void setState(PieceState st) {
+		state = st;
+	}
+
 	public ByteBuffer getByteBuffer() {
 		return ByteBuffer.wrap(data);
 	}
+
 	public void putSlice(int idx) {
 		slices.set(idx, true);
 	}
 
 	public void clearSlices() {
 		this.slices.clear();
-		this.data = new byte[size];
 	}
+
 	public int getNextSlice() {
 		int slice = slices.nextClearBit(0);
 

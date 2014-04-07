@@ -9,10 +9,7 @@ import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Random;
+import java.util.*;
 
 /**
  * Represents a torrent object responsible for talking to peers
@@ -26,7 +23,6 @@ public class Torrent implements Runnable {
 
 	private TorrentInfo torrentInfo;
 	private ArrayList<Piece> pieces;
-	private ArrayList<Piece> busyPieces = new ArrayList<Piece>();
 	private String encodedInfoHash;
 	private RandomAccessFile dataFile;
 	private MappedByteBuffer fileByteBuffer;
@@ -37,6 +33,7 @@ public class Torrent implements Runnable {
 
 	private final Object fileLock = new Object();
 	private final Object runLock = new Object();
+	private final Object peerLock = new Object();
 	private boolean running = true;
 
 	private int port = 6881;
@@ -44,6 +41,7 @@ public class Torrent implements Runnable {
 	private int downloaded = 0;
 	private int left = 0;
 	private String fileName;
+	private boolean sentComplete;
 
 	public Torrent(TorrentInfo ti, String fileName) {
 		this.torrentInfo = ti;
@@ -72,7 +70,6 @@ public class Torrent implements Runnable {
 			ArrayList<HashMap<String,Object>> tmp_peers = getPeers();
 			for (HashMap<String,Object> p : tmp_peers) {
 				if (p.get("ip").equals("128.6.171.130") || p.get("ip").equals("128.6.171.131")) {
-//				if (((String)p.get("peer id")).startsWith("RUBT") && p.get("ip").equals("128.6.171.130")) {
 					Peer pr = new Peer(p, this, this.torrentInfo.info_hash, ByteBuffer.wrap(this.peerId.getBytes()));
 					freePeers.add(pr);
 				}
@@ -83,43 +80,58 @@ public class Torrent implements Runnable {
 			fileByteBuffer = dataFile.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, (Integer)torrentInfo.info_map.get(TorrentInfo.KEY_LENGTH));
 
 			while (true) {
+
+				// We don't have all of the pieces yet...
+				if (!sentComplete) {
+
+					// Check to see if we have finished...
+					synchronized (fileLock) {
+						boolean done = true;
+						Iterator<Piece> it = pieces.iterator();
+						while (it.hasNext() && done) {
+							done = (it.next().getState() == Piece.PieceState.COMPLETE);
+						}
+						if (done) {
+							sendCompleteEvent();
+						}
+					}
+
+					// Pick a peer and a piece and download.
+					ArrayList<Peer> tmpPeers = new ArrayList<Peer>();
+					synchronized (peerLock) {
+						for (Peer p : freePeers) {
+							Piece piece = null;
+							for (Piece pc : pieces) {
+								if (pc.getState() == Piece.PieceState.INCOMPLETE && p.canGetPiece(pc.getIndex())) {
+									piece = pc;
+									break;
+								}
+							}
+							if (piece == null)
+								continue;
+							synchronized (fileLock) {
+								piece.setState(Piece.PieceState.DOWNLOADING);
+								p.getPiece(piece);
+								tmpPeers.add(p);
+								busyPeers.put(piece, p);
+							}
+						}
+						for (Peer p : tmpPeers) {
+							freePeers.remove(p);
+						}
+					}
+				}
+
+				// Check for exit condition.
 				synchronized (runLock) {
 					if (!running) {
 						break;
-					}
-				}
-
-				// We're done.  No pieces to download and no pieces downloading.
-				synchronized (fileLock) {
-					if (busyPieces.size() == 0 && pieces.size() == 0) {
-						sendCompleteEvent();
-						break;
-					}
-				}
-
-
-				ArrayList<Peer> tmpPeers = new ArrayList<Peer>();
-				synchronized (freePeers) {
-					for (Peer p : freePeers) {
-						Piece piece = null;
-						for (Piece pc: pieces) {
-							if (p.canGetPiece(pc.getIndex())) {
-								piece = pc;
-								break;
-							}
+					} else {
+						try {
+							Thread.sleep(10);
+						} catch (InterruptedException e) {
+							e.printStackTrace();
 						}
-						if (piece == null)
-							continue;
-						synchronized (fileLock) {
-							pieces.remove(piece);
-							busyPieces.add(piece);
-							p.getPiece(piece);
-							tmpPeers.add(p);
-							busyPeers.put(piece, p);
-						}
-					}
-					for (Peer p : tmpPeers) {
-						freePeers.remove(p);
 					}
 				}
 			}
@@ -149,15 +161,24 @@ public class Torrent implements Runnable {
 
 	public void peerDying(Peer p) {
 		System.out.println("Peer " + p + " died. Sadface.");
-		synchronized (freePeers) {
+		synchronized (peerLock) {
 			if (freePeers.contains(p)) {
 				freePeers.remove(p);
 			} else if (busyPeers.values().contains(p)) {
+				for (Piece pc : busyPeers.keySet()) {
+					if (busyPeers.get(pc) == p) {
+						pc.clearSlices();
+						pc.setState(Piece.PieceState.INCOMPLETE);
+					}
+				}
 				busyPeers.values().remove(p);
 			}
 		}
 	}
 
+	public Piece getPiece(int index) {
+		return pieces.get(index);
+	}
 
 	/**
 	 * Write the piece data to the piece buffer
@@ -166,28 +187,37 @@ public class Torrent implements Runnable {
 	 */
 	public void putPiece(Piece piece) {
 		MessageDigest md = null;
+		byte[] sha1 = null;
 		try {
 			md = MessageDigest.getInstance("SHA-1");
+			sha1 = md.digest(piece.getByteBuffer().array());
 		}
 		catch(NoSuchAlgorithmException e) {
 			e.printStackTrace();
 		}
 
-		byte[] sha1 = md.digest(piece.getByteBuffer().array());
-		synchronized (fileLock) {
-			if (Arrays.equals(sha1,piece.getHash())) {
-				fileByteBuffer.position(piece.getIndex() * torrentInfo.piece_length);
-				fileByteBuffer.put(piece.getByteBuffer());
-			} else {
-				System.out.println("Piece " + piece.getIndex() + " failed.");
-				piece.clearSlices();
-				pieces.add(piece);
+		synchronized (peerLock) {
+			synchronized (fileLock) {
+				if (Arrays.equals(sha1, piece.getHash())) {
+					fileByteBuffer.position(piece.getIndex() * torrentInfo.piece_length);
+					fileByteBuffer.put(piece.getByteBuffer());
+					piece.setState(Piece.PieceState.COMPLETE);
+					for (Peer p : freePeers) {
+						p.sendHaveMessage(piece.getIndex());
+					}
+					for (Peer p : busyPeers.values())
+						p.sendHaveMessage(piece.getIndex());
+				} else {
+					System.out.println("Piece " + piece.getIndex() + " failed.");
+					piece.clearSlices();
+					piece.setState(Piece.PieceState.INCOMPLETE);
+				}
+				if (busyPeers.get(piece) == null) {
+					System.out.println("NULL");
+				}
+				freePeers.add(busyPeers.get(piece));
+				busyPeers.remove(piece);
 			}
-		}
-		synchronized (freePeers) {
-			freePeers.add(busyPeers.get(piece));
-			busyPeers.remove(piece);
-			busyPieces.remove(piece);
 		}
 	}
 
@@ -270,6 +300,7 @@ public class Torrent implements Runnable {
 				"&left=0"+
 				"&event=completed");
 		HttpURLConnection con = (HttpURLConnection) url.openConnection();
+		sentComplete = true;
 	}
 
 	/**

@@ -365,7 +365,7 @@ public class Peer implements Runnable {
                 if (availablePieces.get(ind)) {
                     ByteBuffer pieceMessage = getPieceMessage(ind, start, size);
                     socketRunner.sendMessage(pieceMessage);
-                    socketRunner.sendMessage(getChokeMessage());//check this
+                    socketRunner.sendMessage(getChokeMessage()); // check this
 
                 }
 
@@ -381,7 +381,6 @@ public class Peer implements Runnable {
 				int slice = currentPiece.getNextSlice();
 				if (slice == -1) { // We've gotten all of the slices already.  So, we're done! Yay.
 					System.out.println(peerInfo.get("peer id") + " All done with this piece.");
-                    broadcastAll();
 					currentPiece.getOwner().putPiece(currentPiece);
 					currentPiece = null;
 					state = PeerState.UNCHOKED;
@@ -397,22 +396,16 @@ public class Peer implements Runnable {
 		}
 	}
 
-    public void broadcastAll() {
-        ByteBuffer bb = ByteBuffer.allocate(9);
-        bb.put(HAVE);
-        bb.putInt(currentPiece.getIndex());
-        System.out.println("---------------------------------------" + currentPiece.getIndex() + "-------------------------------------------");
+
+	public void sendHaveMessage(int index) {
+		ByteBuffer bb = ByteBuffer.allocate(9);
+		bb.put(HAVE);
+		bb.putInt(index);
+		System.out.println("---------------------------------------" + index + "-------------------------------------------");
+		socketRunner.sendMessage(bb);
+	}
 
 
-        synchronized (owner.freePeers) {
-            for (Peer p : owner.freePeers) {
-                p.socketRunner.sendMessage(bb);
-            }
-            for (Peer p : owner.busyPeers.values()) {
-                p.socketRunner.sendMessage(bb);
-            }
-        }
-    }
 
 	/**
 	 * Add a message to the queue of this peer
@@ -494,7 +487,8 @@ public class Peer implements Runnable {
         ByteBuffer bb = ByteBuffer.allocate(9 + length);
         bb.put(PIECE);
         bb.putInt(begin);
-        bb.put(this.currentPiece.getByteBuffer());
+	    Piece pc = owner.getPiece(index);
+	    bb.put(pc.getByteBuffer().array(),begin,length);
         return bb;
     }
 
@@ -509,6 +503,10 @@ public class Peer implements Runnable {
         bb.put(CHOKE);
         return bb;
     }
+
+	public Piece getCurrentPiece() {
+		return this.currentPiece;
+	}
 
 	/**
 	 * Constructs a have message for a peer
