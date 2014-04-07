@@ -30,6 +30,7 @@ public class Peer implements Runnable {
 	private final byte[] INTERESTED = new byte[]{0,0,0,1,2};
 	private final byte[] NOT_INTERESTED = new byte[]{0,0,0,1,3};
 	private final byte[] HAVE = new byte[]{0,0,0,5,4};
+	private final byte[] BITFIELD = new byte[]{0,0,0,0,5};
 	private final byte[] REQUEST = new byte[]{0,0,0,13,6};
 
 	private final byte[] PIECE = new byte[]{0,0,0,0}; // TODO: PIECE
@@ -193,6 +194,7 @@ public class Peer implements Runnable {
 				this.socketRunner = new PeerSocketRunnable(this, (String)peerInfo.get("ip"), (Integer)peerInfo.get("port"));
 				(new Thread(this.socketRunner)).start();
 				this.socketRunner.sendMessage(this.handshake);
+				sendBitfieldMessage();
 				this.lastMessage = System.currentTimeMillis();
 
 				while (running && !die) {
@@ -387,6 +389,16 @@ public class Peer implements Runnable {
 		}
 	}
 
+	public void sendBitfieldMessage() {
+		ByteBuffer bf = owner.getBitField();
+		if (bf == null) return;
+		ByteBuffer bb = ByteBuffer.allocate(bf.limit()+5);
+		bb.putInt(bf.limit()+1);
+		bb.put((byte)5);
+		bb.put(bf);
+		bb.flip();
+		socketRunner.sendMessage(bb);
+	}
 
 	public void sendHaveMessage(int index) {
 		ByteBuffer bb = ByteBuffer.allocate(9);

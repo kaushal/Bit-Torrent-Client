@@ -28,8 +28,8 @@ public class Torrent implements Runnable {
 	private MappedByteBuffer fileByteBuffer;
 	private HashMap<String,Object> infoMap;
 	private String peerId;
-	public ArrayList<Peer> freePeers = new ArrayList<Peer>();
-	public HashMap<Piece,Peer> busyPeers = new HashMap<Piece, Peer>();
+	private ArrayList<Peer> freePeers = new ArrayList<Peer>();
+	private HashMap<Piece,Peer> busyPeers = new HashMap<Piece, Peer>();
 
 	private final Object fileLock = new Object();
 	private final Object runLock = new Object();
@@ -51,8 +51,43 @@ public class Torrent implements Runnable {
 		this.peerId = generateId();
 		this.pieces = generatePieces();
 		this.left = ti.file_length;
+		try {
+			dataFile = new RandomAccessFile(this.fileName,"rw");
+			fileByteBuffer = dataFile.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, (Integer)torrentInfo.info_map.get(TorrentInfo.KEY_LENGTH));
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		verify();
+		getBitField();
 	}
 
+	/**
+	 * Verifies the file and updates what pieces we have.
+	 */
+	private void verify() {
+		int offset = 0;
+		MessageDigest md = null;
+		byte[] sha1 = null;
+		try {
+			for (Piece pc : pieces) {
+				md = MessageDigest.getInstance("SHA-1");
+				ByteBuffer bb = ByteBuffer.allocate(pc.getSize());
+				bb.put((ByteBuffer) fileByteBuffer.duplicate().position(offset).limit(offset + pc.getSize())).flip();
+				offset += pc.getSize();
+				left -= pc.getSize();
+				sha1 = md.digest(bb.array());
+				if (Arrays.equals(sha1,pc.getHash())) {
+					pc.setData(bb);
+					pc.setState(Piece.PieceState.COMPLETE);
+				}
+			}
+		}
+		catch(NoSuchAlgorithmException e) {
+			e.printStackTrace();
+		}
+	}
 	/**
 	 * Used by the RUBTClient to stop the torrent run loop
 	 */
@@ -79,10 +114,8 @@ public class Torrent implements Runnable {
 					freePeers.add(pr);
 				}
 			}
-			dataFile = new RandomAccessFile(this.fileName,"rw");
 			for (Peer pr : freePeers)
 				(new Thread(pr)).start();
-			fileByteBuffer = dataFile.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, (Integer)torrentInfo.info_map.get(TorrentInfo.KEY_LENGTH));
 
             sendStartedEvent();
 
@@ -108,10 +141,12 @@ public class Torrent implements Runnable {
 					synchronized (peerLock) {
 						for (Peer p : freePeers) {
 							Piece piece = null;
-							for (Piece pc : pieces) {
-								if (pc.getState() == Piece.PieceState.INCOMPLETE && p.canGetPiece(pc.getIndex())) {
-									piece = pc;
-									break;
+							synchronized (fileLock) {
+								for (Piece pc : pieces) {
+									if (pc.getState() == Piece.PieceState.INCOMPLETE && p.canGetPiece(pc.getIndex())) {
+										piece = pc;
+										break;
+									}
 								}
 							}
 							if (piece == null)
@@ -369,8 +404,8 @@ public class Torrent implements Runnable {
 	 */
 	private String encodeInfoHash(byte[] infoHashByteArray) {
 		StringBuilder sb = new StringBuilder();
-		for (int i = 0; i < infoHashByteArray.length; i++) {
-			sb.append(String.format("%%%02X", infoHashByteArray[i]));
+		for (byte b : infoHashByteArray) {
+			sb.append(String.format("%%%02X", b));
 		}
 		return sb.toString();
 	}
@@ -378,4 +413,24 @@ public class Torrent implements Runnable {
     public void setUploaded(int uploaded) {
         this.uploaded += uploaded;
     }
+
+	/**
+	 * Calculates a bitfield for the torrent's current state.
+	 * @return
+	 */
+	public ByteBuffer getBitField() {
+		synchronized (fileLock) {
+			byte[] bf = new byte[(pieces.size() + 8 - 1) / 8]; // Ceiling(pieces.size() / 8)
+			for (int i = 0; i < pieces.size(); ++i) {
+				bf[i/8] |= (pieces.get(i).getState() == Piece.PieceState.COMPLETE) ? 0x80 >> (i % 8) : 0;
+			}
+			boolean fail = false;
+			for (int i = 0; i < pieces.size() && !fail; ++i) {
+				fail = (bf[i/8] != 0);
+			}
+			if (fail)
+				return ByteBuffer.wrap(bf);
+			return null;
+		}
+	}
 }

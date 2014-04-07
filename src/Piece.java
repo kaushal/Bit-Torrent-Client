@@ -58,6 +58,10 @@ public class Piece {
 		return state;
 	}
 
+	public void setData(ByteBuffer bb) {
+		bb.get(data);
+	}
+
 	public void setState(PieceState st) {
 		state = st;
 	}
