@@ -118,14 +118,14 @@ public class PeerMessage implements Comparable<PeerMessage> {
 		return -1;
 	}
 
-	public long getBegin() {
+	public int getBegin() {
 		if (type == PeerMessageType.Request || type == PeerMessageType.Piece ||
 			type == PeerMessageType.Cancel)
 			return (Integer) data.get("begin");
 		return -1;
 	}
 
-	public long getLength() {
+	public int getLength() {
 		if (type == PeerMessageType.Request || type == PeerMessageType.Cancel)
 			return (Integer) data.get("length");
 		return -1;
