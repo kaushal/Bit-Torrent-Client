@@ -127,7 +127,7 @@ public class Torrent implements Runnable {
 
 			while (running) {
 	            if ((System.currentTimeMillis() - lastAnnounce) >= (minInterval - 5000)) {
-	               tracker.announce(peerId,port,uploaded,downloaded,left,encodedInfoHash);
+	               tracker.announce(peerId, port, uploaded, downloaded, left, encodedInfoHash);
 	                lastAnnounce = System.currentTimeMillis();
 	            }
 
@@ -305,11 +305,50 @@ public class Torrent implements Runnable {
 
 	private Piece choosePiece(Peer pr) {
 		// TODO: Implement rarest-piece algorithms...
+
+        System.out.println("Here");
+        int[] pieceRanks = new int[pieces.size()];
+
+        for(Piece piece : pieces) {
+            if (piece.getState() == Piece.PieceState.INCOMPLETE && pr.canGetPiece(piece.getIndex())) {
+                pieceRanks[piece.getIndex()] = 0;
+            }
+            else {
+                pieceRanks[piece.getIndex()] = -1;
+            }
+            pieceRanks[piece.getIndex()] = -100;
+        }
+
+        for (Peer peer : peers.values()) {
+            for (Piece piece : pieces) {
+                if(peer.canGetPiece(piece.getIndex()) && pieceRanks[piece.getIndex()] != -1) {
+                    pieceRanks[piece.getIndex()]++;
+                }
+            }
+        }
+
+        int leastPieceIndex = -1, leastPieceValue = -1;
+
+        for (int i = 0; i < pieceRanks.length; i++) {
+            if (leastPieceIndex == -1 && pieceRanks[i] != -1) {
+                leastPieceIndex = i;
+                leastPieceValue = pieceRanks[i];
+            }
+            else if (leastPieceValue != -1 && leastPieceValue > pieceRanks[i]) {
+                leastPieceIndex = i;
+                leastPieceValue = pieceRanks[i];
+            }
+        }
+
+        return pieces.get(leastPieceIndex);
+
+        /*
 		for (Piece pc : pieces) {
 			if (pc.getState() == Piece.PieceState.INCOMPLETE && pr.getAvailablePieces().get(pc.getIndex()))
 				return pc;
 		}
 		return null;
+		*/
 	}
 
 	/**
