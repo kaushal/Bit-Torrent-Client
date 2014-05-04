@@ -290,6 +290,9 @@ public class Torrent implements Runnable {
 				continue;
 			if (p.getCurrentPiece() == null) {
 				Piece pc = choosePiece(p);
+				if (pc == null) { // There's no piece to download from this peer...
+					continue;
+				}
 				p.configurePiece(pc);
 				Peer.PeerState state = p.getState();
 				if (state == Peer.PeerState.CHOKED) {
