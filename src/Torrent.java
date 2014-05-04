@@ -269,9 +269,8 @@ public class Torrent implements Runnable {
 				pr.configurePiece(pc);
 
 				if (pr.getCurrentPiece() == null) { // We've gotten all of the slices already.  So, we're done! Yay.
-					System.out.println(pr.getPeerId() + " All done with this piece.");
+					System.out.println(pr + " All done with this piece.");
 					putPiece(pc);
-					pr.setState(Peer.PeerState.UNCHOKED);
 				} else {
 					peerConnections.get(pr.getPeerId()).sendRequest(pc.getIndex(), pr.getPieceBegin(), pr.getPieceLength());
 				}
@@ -287,13 +286,19 @@ public class Torrent implements Runnable {
 
 	private void processFreePeers() {
 		for (Peer p : peers.values()) {
-			if (p.getState() == Peer.PeerState.CHOKED || (p.getState() == Peer.PeerState.UNCHOKED && p.getCurrentPiece() == null)) {
+			if (p.getState() == Peer.PeerState.HANDSHAKE)
+				continue;
+			if (p.getCurrentPiece() == null) {
 				Piece pc = choosePiece(p);
 				p.configurePiece(pc);
-				if (p.getState() == Peer.PeerState.CHOKED)
+				Peer.PeerState state = p.getState();
+				if (state == Peer.PeerState.CHOKED) {
 					peerConnections.get(p.getPeerId()).sendInterested();
+				} else if (state == Peer.PeerState.DOWNLOADING || state == Peer.PeerState.UNCHOKED) {
+					peerConnections.get(p.getPeerId()).sendRequest(p.getCurrentPiece().getIndex(),p.getPieceBegin(),p.getPieceLength());
+				}
 			} else {
-				System.out.println(new String(p.getPeerId().array()) + " " + p.getState());
+				System.out.println(p + " " + p.getState());
 			}
 		}
 	}

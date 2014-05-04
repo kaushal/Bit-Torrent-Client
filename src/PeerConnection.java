@@ -196,7 +196,7 @@ public class PeerConnection implements Runnable {
 			case 7: // Piece
 				idx = msg.getInt();
 				begin = msg.getInt();
-				return PeerMessage.Piece(peerId,idx,begin,msg.compact());
+				return PeerMessage.Piece(peerId,idx,begin, (ByteBuffer) msg.compact().flip());
 			default:
 				return null;
 		}
