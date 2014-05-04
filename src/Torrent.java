@@ -233,7 +233,9 @@ public class Torrent implements Runnable {
 				System.out.println(pr.getPeerId() + " Not interested.");
 				break;
 			case Have: // Have
+                // TODO: call updateInterested
 				pr.setPieceAvailable(msg.getIndex());
+                updateInterested(pr);
 				System.out.println(pr.getPeerId() + " Have: " + msg.getIndex());
 				break;
 			case Bitfield: // Bitfield
@@ -401,8 +403,10 @@ public class Torrent implements Runnable {
 					fileByteBuffer.position(piece.getIndex() * torrentInfo.piece_length);
 					fileByteBuffer.put(piece.getByteBuffer());
 					piece.setState(Piece.PieceState.COMPLETE);
-					for (PeerConnection pc : peerConnections.values()) {
-						pc.sendHave(piece.getIndex());
+                    for (ByteBuffer bb : peerConnections.keySet()) {
+                        // TODO: Call updateInterested
+                        updateInterested(peers.get(bb));
+                        peerConnections.get(bb).sendHave(piece.getIndex());
 					}
 	                // Update stats
 	                downloaded += piece.getSize();
@@ -416,6 +420,15 @@ public class Torrent implements Runnable {
 			}
 		}
 	}
+
+    public void updateInterested(Peer pr) {
+        for (Piece p : pieces) {
+            if (pr.canGetPiece(p.getIndex()) && p.getState() != Piece.PieceState.COMPLETE) {
+                // Find the fucking peerconection
+                peerConnections.get(pr.getPeerId()).sendInterested();
+            }
+        }
+    }
 
 	/**
 	 * Calculates and creates an arraylist of pieces to be downloaded
