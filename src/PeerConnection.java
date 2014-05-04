@@ -326,7 +326,7 @@ public class PeerConnection implements Runnable {
 	public boolean sendBitfield(ByteBuffer bitfield) {
 		ByteBuffer bb = ByteBuffer.allocate(bitfield.limit()+5);
 		bb.put(BITFIELD);
-		bb.putInt(bitfield.limit() + 1, 0);
+		bb.putInt(0,bitfield.limit() + 1);
 		bb.put(bitfield);
 		bb.flip();
 		return sendMessage(bb);

@@ -188,15 +188,10 @@ public class Torrent implements Runnable {
 					peerConnections.get(pr.getPeerId()).shutdown();
 					return;
 				}
-				message.position(message.position() + 20);
 				ByteBuffer bf = getBitField();
 				if (bf != null)
 					peerConnections.get(pr.getPeerId()).sendBitfield(bf);
 				pr.setState(Peer.PeerState.CHOKED);
-
-				if (message.hasRemaining()) {
-					System.out.println("HAVE REMAINING MOTHERFUCKER.");
-				}
 				return;
 			}
 
