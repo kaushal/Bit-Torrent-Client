@@ -98,6 +98,7 @@ public class TrackerConnection {
 
 	@SuppressWarnings("unchecked")
 	private HashMap<ByteBuffer,Object> announce(String event, String peerId, int port, int uploaded, int downloaded, int left, String infoHash) throws IOException, BencodingException {
+		System.out.println("TRACKER: " + event + " Downloaded: " + downloaded + " Uploaded: " + uploaded+ " Left: " + left);
 		URL url = new URL(this.trackerURL.toString() +
 				"?info_hash=" + infoHash +
 				"&peer_id=" + peerId +

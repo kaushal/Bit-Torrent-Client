@@ -13,67 +13,29 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  */
 public class Peer {
 
-	public Piece getCurrentPiece() {
-		return currentPiece;
-	}
+	/*
+	 * These are public because there's no reason for them not to be.
+	 * All that ever gets done is get and set on them and they're primitives.
+	 */
+	public boolean handshook = false;
+	public boolean interested = false;
+	public boolean choked = true;
+	public boolean choking = true;
+	public int outstandingRequests = 0;
 
-	public int getPieceBegin() {
-		return pieceBegin;
-	}
+	private ByteBuffer peerId;
+	private BitSet availablePieces = new BitSet();
 
-	public int getPieceLength() {
-		return pieceLength;
+	public Peer(ByteBuffer peerId) {
+		this.peerId = peerId.duplicate();
 	}
 
 	public void setAvailablePieces(BitSet availablePieces) {
 		this.availablePieces = availablePieces;
 	}
 
-	public void configurePiece(Piece pc) {
-		if (pc == null) {
-			currentPiece = null;
-			pieceBegin = 0;
-			pieceLength = 0;
-		} else {
-			int slice = pc.getNextSlice();
-			if (slice == -1) {
-				pieceBegin = 0;
-				pieceLength = 0;
-				currentPiece = null;
-				return;
-			}
-			currentPiece = pc;
-			pieceBegin = slice * Piece.SLICE_SIZE;
-			pieceLength = Math.min(Piece.SLICE_SIZE, pc.getSize() - (slice * Piece.SLICE_SIZE));
-		}
-	}
-
-	public enum PeerState {
-		BEGIN, HANDSHAKE, CHOKED, UNCHOKED, DOWNLOADING, INTERESTED
-	}
-
-	private ByteBuffer peerId;
-	private PeerState state = PeerState.BEGIN;
-	private BitSet availablePieces = new BitSet();
-	private int pieceBegin;
-	private int pieceLength;
-
-	private Piece currentPiece = null;
-
-	public Peer(ByteBuffer peerId) {
-		this.peerId = peerId.duplicate();
-	}
-
 	public ByteBuffer getPeerId() {
 		return peerId;
-	}
-
-	public PeerState getState() {
-		return state;
-	}
-
-	public void setState(PeerState state) {
-		this.state = state;
 	}
 
 	public BitSet getAvailablePieces() {
@@ -83,33 +45,6 @@ public class Peer {
 	public void setPieceAvailable(int index) {
 		this.availablePieces.set(index);
 	}
-
-	/**
-	 * Handles the piece of the torrent. Responsible for getting slices
-	 * to download.
-	 */
-/*
-	public void handlePiece() {
-		if (pieceState == null) { // We haven't worked with this piece yet.
-			if (state == PeerState.CHOKED) {
-				socketRunner.sendMessage(ByteBuffer.wrap(INTERESTED));
-				pieceState = "Interested";
-			} else if (state == PeerState.UNCHOKED) {
-				int slice = currentPiece.getNextSlice();
-				if (slice == -1) { // We've gotten all of the slices already.  So, we're done! Yay.
-					System.out.println("Starting a piece and there are no slices... Wtf?");
-					currentPiece = null;
-					return;
-				}
-				ByteBuffer buf = getRequestMessage(currentPiece.getIndex(), slice * (Piece.SLICE_SIZE), Math.min(Piece.SLICE_SIZE, currentPiece.getSize() - (slice * Piece.SLICE_SIZE)));
-				socketRunner.sendMessage(buf);
-				state = PeerState.DOWNLOADING;
-				pieceState = "Downloading";
-				System.out.println(peerId + " Unchoke and interested");
-			}
-		}
-	}
-*/
 
 	/**
 	 * Used to know if a peer can provide a certain piece

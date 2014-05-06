@@ -32,6 +32,7 @@ public class Torrent implements Runnable {
 	private String peerId;
 	private HashMap<ByteBuffer,Peer> peers = new HashMap<ByteBuffer, Peer>();
 	private HashMap<ByteBuffer,PeerConnection> peerConnections = new HashMap<ByteBuffer, PeerConnection>();
+	private BitSet piecesHad = null;
 
 	private final Object fileLock = new Object();
 	private final Object peerLock = new Object();
@@ -43,9 +44,10 @@ public class Torrent implements Runnable {
 	private int downloaded = 0;
 	private int left = 0;
 	private int minInterval = 0;
+	private int interval = 0;
 	private long lastAnnounce = 0;
 	private String fileName;
-	private boolean sentComplete;
+	private boolean sentComplete = false;
 
 	public Torrent(TorrentInfo ti, String fileName) {
 		this.torrentInfo = ti;
@@ -84,6 +86,7 @@ public class Torrent implements Runnable {
 	                left -= pc.getSize();
 					pc.setData(bb);
 					pc.setState(Piece.PieceState.COMPLETE);
+					piecesHad.set(pc.getIndex());
 				}
 			}
 		} catch (NoSuchAlgorithmException e) {
@@ -110,20 +113,27 @@ public class Torrent implements Runnable {
 		try {
 			HashMap<ByteBuffer, Object> trackerResponse = tracker.start(peerId, port, uploaded, downloaded, left, encodedInfoHash);
 			ArrayList<HashMap<ByteBuffer,Object>> tmp_peers = (ArrayList<HashMap<ByteBuffer, Object>>) trackerResponse.get(TrackerConnection.PEERS);
+			int i = 99;
 			for (HashMap<ByteBuffer,Object> p : tmp_peers) {
 				if ((new String(((ByteBuffer)p.get(TrackerConnection.PEER_IP)).array())).equals("128.6.171.130") || (new String(((ByteBuffer)p.get(TrackerConnection.PEER_IP)).array())).equals("128.6.171.131")) {
 					PeerConnection pc = new PeerConnection(this, new String(((ByteBuffer)p.get(TrackerConnection.PEER_IP)).array()), (Integer) p.get(TrackerConnection.PEER_PORT),(ByteBuffer)p.get(TrackerConnection.PEER_ID));
 					pc.sendHandshake(this.torrentInfo.info_hash, ByteBuffer.wrap(this.peerId.getBytes()));
 					Peer pr = new Peer((ByteBuffer) p.get(TrackerConnection.PEER_ID));
-					pr.setState(Peer.PeerState.HANDSHAKE);
+					pr.handshook = false;
 					peerConnections.put(pr.getPeerId(), pc);
 					peers.put(pr.getPeerId(), pr);
 					(new Thread(pc)).start();
-					break;
+					if (--i == 0) break;
 				}
 			}
-			minInterval = (Integer)trackerResponse.get(TrackerConnection.MIN_INTERVAL);
-	        lastAnnounce = System.currentTimeMillis();
+			minInterval = (Integer)trackerResponse.get(TrackerConnection.MIN_INTERVAL) * 1000;
+			interval = (Integer)trackerResponse.get(TrackerConnection.INTERVAL) * 1000;
+
+			// If there's no minimum interval...
+			if (minInterval == 0)
+				minInterval = interval / 2;
+
+			lastAnnounce = System.currentTimeMillis();
 
 			while (running) {
 	            if ((System.currentTimeMillis() - lastAnnounce) >= (minInterval - 5000)) {
@@ -172,7 +182,7 @@ public class Torrent implements Runnable {
 
 	private void handleMessage(Peer pr, PeerMessage msg) {
 		System.out.println("HandleMessage: " + msg.getType());
-		if (pr.getState() == Peer.PeerState.HANDSHAKE) {
+		if (!pr.handshook) {
 			if (msg.getType() == PeerMessage.PeerMessageType.Handshake) {
 				ByteBuffer message = msg.getBytes();
 				System.out.println(pr.getPeerId() + "Hand shaken.");
@@ -189,9 +199,11 @@ public class Torrent implements Runnable {
 					return;
 				}
 				ByteBuffer bf = getBitField();
-				if (bf != null)
+				if (bf != null) {
+					System.out.println(pr + " Send:Bitfield");
 					peerConnections.get(pr.getPeerId()).sendBitfield(bf);
-				pr.setState(Peer.PeerState.CHOKED);
+				}
+				pr.handshook = true;
 				return;
 			}
 
@@ -200,81 +212,73 @@ public class Torrent implements Runnable {
 			case Handshake:
 				break;
 			case Choke: // Choke
-				System.out.println(msg.getPeerId() + " Choke.");
-				pr.setState(Peer.PeerState.CHOKED);
-				pr.configurePiece(null);
+				System.out.println(pr + " Choke.");
+				pr.choked = true;
+				pr.outstandingRequests = 0;
 				break;
 			case Unchoke: // Unchoke
-				System.out.println(pr.getPeerId() + " Unchoke.");
-				pr.setState(Peer.PeerState.UNCHOKED);
-				if (pr.getCurrentPiece() == null) {
-					System.out.println(pr.getPeerId() + "Unchoked and there is no piece waiting...");
-					break;
-				}
-				int slice = pr.getCurrentPiece().getNextSlice();
-				if (slice == -1) {
-					System.out.println(pr.getPeerId() + " Starting a piece and there are no slices... Error?");
-					pr.configurePiece(null);
-					break;
-				}
-				peerConnections.get(pr.getPeerId()).sendRequest(pr.getCurrentPiece().getIndex(),pr.getPieceBegin(),pr.getPieceLength());
-				pr.setState(Peer.PeerState.DOWNLOADING);
-				pr.getCurrentPiece().setState(Piece.PieceState.DOWNLOADING);
-			break;
+				System.out.println(pr + " Unchoke.");
+				pr.choked = false;
+				break;
 			case Interested: // Interested
+				pr.interested = true;
 				//step 1
 				//unchoke or nothing
-				System.out.println(pr.getPeerId() + " Interested.");
-				System.out.println(pr.getState());
 				peerConnections.get(pr.getPeerId()).sendUnchoke();
-
+				pr.choking = false;
+				System.out.println(pr + " Interested.");
 				break;
 			case NotInterested: // Not Interested
-				System.out.println(pr.getPeerId() + " Not interested.");
+				pr.interested = false;
+				System.out.println(pr + " Not interested.");
 				break;
 			case Have: // Have
-                // TODO: call updateInterested
 				pr.setPieceAvailable(msg.getIndex());
-                updateInterested(pr);
-				System.out.println(pr.getPeerId() + " Have: " + msg.getIndex());
+				if (!piecesHad.get(msg.getIndex()))
+					peerConnections.get(pr.getPeerId()).sendInterested();
+				System.out.println(pr + " Have: " + msg.getIndex());
 				break;
 			case Bitfield: // Bitfield
 				pr.setAvailablePieces(msg.getBitfield());
+				BitSet tmp = ((BitSet)piecesHad.clone());
+				tmp.flip(0, piecesHad.size());
+				if (!tmp.intersects(pr.getAvailablePieces())) {
+					peerConnections.get(pr.getPeerId()).sendNotInterested();
+				} else {
+					peerConnections.get(pr.getPeerId()).sendInterested();
+				}
 				break;
 
 			case Request: // Request
-				//request message
-				System.out.println("--------------------------------------------------------------------------------");
-				System.out.println(pr.getPeerId() + " Request.");
 
-				peerConnections.get(pr.getPeerId()).sendUnchoke();
-				peerConnections.get(pr.getPeerId()).sendPiece(msg.getIndex(),msg.getBegin(),msg.getLength(),pieces.get(msg.getIndex()).getByteBuffer());
-				peerConnections.get(pr.getPeerId()).sendChoke();
+				// If they're unchoked, just send them the piece...
+				if (!pr.choking) {
+					System.out.println(pr + " Send:Piece");
+					peerConnections.get(pr.getPeerId()).sendPiece(msg.getIndex(),msg.getBegin(),msg.getLength(),pieces.get(msg.getIndex()).getByteBuffer());
+					uploaded += msg.getLength();
+				}
 
 				break;
 			case Piece: // Piece
-				System.out.println(pr.getPeerId() + " Incoming data.");
-				ByteBuffer pieceBuffer = pr.getCurrentPiece().getByteBuffer();
+				System.out.println(pr + " Incoming data.");
+				Piece pc = pieces.get(msg.getIndex());
+				pr.outstandingRequests--;
 
-				// If we get the wrong piece, just ignore it.  We'll request it again next time.
+				System.out.println("Obtain:  " + msg.getIndex() + " " + msg.getBegin() + " " + msg.getLength());
+				((ByteBuffer)pc.getByteBuffer().position(msg.getBegin())).put(msg.getBytes());
+				pc.putSlice(msg.getBegin() / Piece.SLICE_SIZE);
 
-				if (msg.getIndex() == pr.getCurrentPiece().getIndex()) {
-					System.out.println("Obtain:  " + msg.getIndex() + " " + msg.getBegin() + " " + msg.getLength());
-					int begin = msg.getBegin();
-					((ByteBuffer)pieceBuffer.position(begin)).put(msg.getBytes());
-					pr.getCurrentPiece().putSlice(begin / (Piece.SLICE_SIZE));
-				}
-
-
-				Piece pc = pr.getCurrentPiece();
-				// Passing this piece back in causes it to update the begin and length fields.
-				pr.configurePiece(pc);
-
-				if (pr.getCurrentPiece() == null) { // We've gotten all of the slices already.  So, we're done! Yay.
-					System.out.println(pr + " All done with this piece.");
-					putPiece(pc);
+				int slice = pc.getNextSlice();
+				if (slice == -1) {
+					if (!pc.isLoadingSlices()) {
+						System.out.println(pr + " No more slices to grab. " + pc.getIndex() + ".");
+						putPiece(pc);
+					} else {
+						System.out.println(pr + " Waiting on remaining slices. " + pc.getIndex() + ".");
+					}
 				} else {
-					peerConnections.get(pr.getPeerId()).sendRequest(pc.getIndex(), pr.getPieceBegin(), pr.getPieceLength());
+					System.out.println(pr + " Send:Request");
+					peerConnections.get(pr.getPeerId()).sendRequest(pc.getIndex(), pc.getBeginOfSlice(slice), pc.getLengthOfSlice(slice));
 				}
 
 				break;
@@ -288,22 +292,21 @@ public class Torrent implements Runnable {
 
 	private void processFreePeers() {
 		for (Peer p : peers.values()) {
-			if (p.getState() == Peer.PeerState.HANDSHAKE)
+			if (!p.handshook)
 				continue;
-			if (p.getCurrentPiece() == null) {
+			if (!p.choked && p.outstandingRequests < 5) {
 				Piece pc = choosePiece(p);
 				if (pc == null) { // There's no piece to download from this peer...
 					continue;
 				}
-				p.configurePiece(pc);
-				Peer.PeerState state = p.getState();
-				if (state == Peer.PeerState.CHOKED) {
-					peerConnections.get(p.getPeerId()).sendInterested();
-				} else if (state == Peer.PeerState.DOWNLOADING || state == Peer.PeerState.UNCHOKED) {
-					peerConnections.get(p.getPeerId()).sendRequest(p.getCurrentPiece().getIndex(),p.getPieceBegin(),p.getPieceLength());
+				int slice = pc.getNextSlice();
+				if (slice != -1) {
+					p.outstandingRequests++;
+					System.out.println(p + " Send:Request");
+					peerConnections.get(p.getPeerId()).sendRequest(pc.getIndex(),pc.getBeginOfSlice(slice),pc.getLengthOfSlice(slice));
 				}
 			} else {
-				System.out.println(p + " " + p.getState());
+				System.out.println(p + " Waiting.");
 			}
 		}
 	}
@@ -311,49 +314,51 @@ public class Torrent implements Runnable {
 	private Piece choosePiece(Peer pr) {
 		// TODO: Implement rarest-piece algorithms...
 
-        System.out.println("Here");
-        int[] pieceRanks = new int[pieces.size()];
+//        System.out.println(pr + " Here");
+//        int[] pieceRanks = new int[pieces.size()];
+//
+//        for(Piece piece : pieces) {
+//            if (piece.getState() == Piece.PieceState.INCOMPLETE && pr.canGetPiece(piece.getIndex())) {
+//                pieceRanks[piece.getIndex()] = 0;
+//            }
+//            else {
+//                pieceRanks[piece.getIndex()] = -1;
+//            }
+//            pieceRanks[piece.getIndex()] = -100;
+//        }
+//
+//        for (Peer peer : peers.values()) {
+//            for (Piece piece : pieces) {
+//                if(peer.canGetPiece(piece.getIndex()) && pieceRanks[piece.getIndex()] != -1) {
+//                    pieceRanks[piece.getIndex()]++;
+//                }
+//            }
+//        }
+//
+//        int leastPieceIndex = -1, leastPieceValue = -1;
+//
+//        for (int i = 0; i < pieceRanks.length; i++) {
+//            if (leastPieceIndex == -1 && pieceRanks[i] != -1) {
+//                leastPieceIndex = i;
+//                leastPieceValue = pieceRanks[i];
+//            }
+//            else if (leastPieceValue != -1 && leastPieceValue > pieceRanks[i]) {
+//                leastPieceIndex = i;
+//                leastPieceValue = pieceRanks[i];
+//            }
+//        }
+//
+//        return pieces.get(leastPieceIndex);
 
-        for(Piece piece : pieces) {
-            if (piece.getState() == Piece.PieceState.INCOMPLETE && pr.canGetPiece(piece.getIndex())) {
-                pieceRanks[piece.getIndex()] = 0;
-            }
-            else {
-                pieceRanks[piece.getIndex()] = -1;
-            }
-            pieceRanks[piece.getIndex()] = -100;
-        }
 
-        for (Peer peer : peers.values()) {
-            for (Piece piece : pieces) {
-                if(peer.canGetPiece(piece.getIndex()) && pieceRanks[piece.getIndex()] != -1) {
-                    pieceRanks[piece.getIndex()]++;
-                }
-            }
-        }
-
-        int leastPieceIndex = -1, leastPieceValue = -1;
-
-        for (int i = 0; i < pieceRanks.length; i++) {
-            if (leastPieceIndex == -1 && pieceRanks[i] != -1) {
-                leastPieceIndex = i;
-                leastPieceValue = pieceRanks[i];
-            }
-            else if (leastPieceValue != -1 && leastPieceValue > pieceRanks[i]) {
-                leastPieceIndex = i;
-                leastPieceValue = pieceRanks[i];
-            }
-        }
-
-        return pieces.get(leastPieceIndex);
-
-        /*
 		for (Piece pc : pieces) {
-			if (pc.getState() == Piece.PieceState.INCOMPLETE && pr.getAvailablePieces().get(pc.getIndex()))
+			if (pc.getState() == Piece.PieceState.INCOMPLETE && pr.canGetPiece(pc.getIndex())) {
 				return pc;
+			}
 		}
+		System.out.println("Choose failed...");
 		return null;
-		*/
+
 	}
 
 	/**
@@ -385,9 +390,10 @@ public class Torrent implements Runnable {
 	 * Write the piece data to the piece buffer
 	 *
 	 * @param piece A piece object representation to be added
+	 * @return whether or not this piece validated.
 	 */
-	public void putPiece(Piece piece) {
-		MessageDigest md = null;
+	public boolean putPiece(Piece piece) {
+		MessageDigest md;
 		byte[] sha1 = null;
 		try {
 			md = MessageDigest.getInstance("SHA-1");
@@ -403,11 +409,15 @@ public class Torrent implements Runnable {
 					fileByteBuffer.position(piece.getIndex() * torrentInfo.piece_length);
 					fileByteBuffer.put(piece.getByteBuffer());
 					piece.setState(Piece.PieceState.COMPLETE);
+					piecesHad.set(piece.getIndex());
                     for (ByteBuffer bb : peerConnections.keySet()) {
-                        // TODO: Call updateInterested
-                        updateInterested(peers.get(bb));
                         peerConnections.get(bb).sendHave(piece.getIndex());
-					}
+	                    BitSet tmp = ((BitSet)piecesHad.clone());
+	                    tmp.flip(0, piecesHad.size());
+	                    if (!tmp.intersects(peers.get(bb).getAvailablePieces())) {
+		                    peerConnections.get(bb).sendNotInterested();
+	                    }
+                    }
 	                // Update stats
 	                downloaded += piece.getSize();
 	                left -= piece.getSize();
@@ -416,19 +426,22 @@ public class Torrent implements Runnable {
 					System.out.println("Piece " + piece.getIndex() + " failed.");
 					piece.clearSlices();
 					piece.setState(Piece.PieceState.INCOMPLETE);
+					return false;
 				}
 			}
 		}
+		if (piecesHad.nextClearBit(0) == pieces.size() && !sentComplete) {
+			sentComplete = true;
+			try {
+				tracker.complete(peerId,port,uploaded,downloaded,left,encodedInfoHash);
+			} catch (IOException e) {
+				e.printStackTrace();
+			} catch (BencodingException e) {
+				e.printStackTrace();
+			}
+		}
+		return true;
 	}
-
-    public void updateInterested(Peer pr) {
-        for (Piece p : pieces) {
-            if (pr.canGetPiece(p.getIndex()) && p.getState() != Piece.PieceState.COMPLETE) {
-                // Find the fucking peerconection
-                peerConnections.get(pr.getPeerId()).sendInterested();
-            }
-        }
-    }
 
 	/**
 	 * Calculates and creates an arraylist of pieces to be downloaded
@@ -440,8 +453,9 @@ public class Torrent implements Runnable {
 		ArrayList<Piece> al = new ArrayList<Piece>();
 		int total = torrentInfo.file_length;
 		for (int i = 0; i < torrentInfo.piece_hashes.length; ++i, total -= torrentInfo.piece_length) {
-			al.add(new Piece(i, Math.min(total, torrentInfo.piece_length), torrentInfo.piece_hashes[i], this));
+			al.add(new Piece(i, Math.min(total, torrentInfo.piece_length), torrentInfo.piece_hashes[i]));
 		}
+		this.piecesHad = new BitSet(al.size());
 		return al;
 	}
 
@@ -471,10 +485,6 @@ public class Torrent implements Runnable {
 			sb.append(String.format("%%%02X", b));
 		}
 		return sb.toString();
-	}
-
-	public void setUploaded(int uploaded) {
-	    this.uploaded += uploaded;
 	}
 
 	/**

@@ -85,8 +85,12 @@ public class PeerConnection implements Runnable {
 			while (running) {
 				Thread.sleep(10);
 				ByteBuffer msg = messages.poll();
-				if (msg != null) { // We have a message to send.
-					outputStream.write(msg.array());
+				try {
+					if (msg != null) { // We have a message to send.
+						outputStream.write(msg.array());
+					}
+				} catch (Exception e) {
+					e.printStackTrace();
 				}
 				if (inputStream.available() > 0) { // We have bytes to read...
 					byte[] tbuf = new byte[1024];
@@ -162,7 +166,6 @@ public class PeerConnection implements Runnable {
 	 * @return A PeerMessage representing whatever message was passed in.  Keep-Alive messages are discarded.
 	 */
 	private PeerMessage processMessage(ByteBuffer msg) {
-		System.out.println("PROCESS MESSAGE");
 		int len = msg.getInt();
 		if (len == 0) // We don't actually emit a message when we get keepalives...
 			return null;
@@ -276,7 +279,7 @@ public class PeerConnection implements Runnable {
 	public boolean sendPiece(int index, int begin, int length, ByteBuffer pieceData) {
 		ByteBuffer bb = ByteBuffer.allocate(13+length);
 		bb.put(PIECE);
-		bb.putInt(9+length,0);
+		bb.putInt(0,9+length);
 		bb.putInt(index);
 		bb.putInt(begin);
 		bb.put(pieceData.array(), begin, length);
