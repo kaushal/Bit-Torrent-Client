@@ -33,7 +33,9 @@ import edu.rutgers.cs.cs352.bt.exceptions.BencodingException;
  * @author Robert Moore II
  *
  */
-public final class Bencoder2 
+
+@SuppressWarnings("ALL")
+public final class Bencoder2
 {
 	/**
 	 * Indicates an invalid object type or bencoded object.

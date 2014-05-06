@@ -128,7 +128,7 @@ public class TorrentInfo
 	/**
 	 * Creates a new TorrentInfo object from the specified byte array.  If the byte array is {@code null} or
 	 * has a length of 0(zero), then an {@code IllegalArgumentException} is thrown.
-	 * @param torrent_file_bytes
+	 * @param torrent_file_bytes bytes of torrent file
 	 * @throws BencodingException
 	 */
 	@SuppressWarnings("unchecked")
@@ -151,8 +151,7 @@ public class TorrentInfo
 		
 		try {
 			String url_string = new String(url_buff.array(), "ASCII");
-			URL announce_url = new URL(url_string);
-			this.announce_url = announce_url;
+			this.announce_url = new URL(url_string);
 		}
 		catch(UnsupportedEncodingException uee)
 		{
@@ -187,7 +186,7 @@ public class TorrentInfo
 		Integer piece_length = (Integer)this.info_map.get(TorrentInfo.KEY_PIECE_LENGTH);
 		if(piece_length == null)
 			throw new BencodingException("Could not extract piece length from info dictionary.  Corrupt file?");
-		this.piece_length = piece_length.intValue();
+		this.piece_length = piece_length;
 		
 		// Extract the file name from the info dictionary
 		ByteBuffer name_bytes = (ByteBuffer)this.info_map.get(TorrentInfo.KEY_NAME);
@@ -205,7 +204,7 @@ public class TorrentInfo
 		Integer file_length = (Integer)this.info_map.get(TorrentInfo.KEY_LENGTH);
 		if(file_length == null)
 			throw new BencodingException("Could not extract file length from info dictionary.  Corrupt file?");
-		this.file_length = file_length.intValue();
+		this.file_length = file_length;
 		
 		// Extract the piece hashes from the info dictionary
 		ByteBuffer all_hashes = (ByteBuffer)this.info_map.get(TorrentInfo.KEY_PIECES);

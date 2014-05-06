@@ -9,32 +9,46 @@ import java.util.BitSet;
  * @author kaushall
  */
 public class Piece {
-	public enum PieceState { INCOMPLETE, DOWNLOADING, COMPLETE};
+	public int getBeginOfSlice(int slice) {
+		if (slice < 0 || slice >= maxSlices)
+			return -1;
+		return slice * SLICE_SIZE;
+	}
+
+	public int getLengthOfSlice(int slice) {
+		if (slice < 0 || slice >= maxSlices)
+			return -1;
+		return Math.min(SLICE_SIZE,size - (slice * SLICE_SIZE));
+	}
+
+	public enum PieceState { INCOMPLETE, COMPLETE};
 
 	public static final int SLICE_SIZE = 2<<13;
 	private int index;
 	private int size;
 	private byte[] hash;
-	private Torrent owner;
 	private BitSet slices;
+	private BitSet loadingSlices;
+	private int maxSlices;
 	private byte[] data;
 	private PieceState state = PieceState.INCOMPLETE;
 
     /**
      *
-     * @param index
-     * @param size
-     * @param hash
-     * @param ownerTorrent
+     * @param index piece index
+     * @param size size of piece
+     * @param hash SHA hash of piece
      */
 
-	public Piece(int index, int size, ByteBuffer hash, Torrent ownerTorrent) {
+	public Piece(int index, int size, ByteBuffer hash) {
+		System.out.println(index + ":" + size);
 		this.hash = hash.array();
-		this.owner = ownerTorrent;
 		this.index = index;
 		this.size = size;
 		this.data = new byte[size];
-		this.slices = new BitSet((size + (SLICE_SIZE) - 1)/(SLICE_SIZE)); // Ceiling(size/sliceSize)
+		this.maxSlices = (size + (SLICE_SIZE) - 1)/(SLICE_SIZE); // Ceiling(size/sliceSize)
+		this.slices = new BitSet(maxSlices);
+		this.loadingSlices = new BitSet(maxSlices);
 		slices.clear();
 	}
 
@@ -50,10 +64,6 @@ public class Piece {
 		return hash;
 	}
 
-	public Torrent getOwner() {
-		return owner;
-	}
-
 	public PieceState getState() {
 		return state;
 	}
@@ -66,30 +76,39 @@ public class Piece {
 		state = st;
 	}
 
-    /**
-     *
-     * @return
-     */
-
 	public ByteBuffer getByteBuffer() {
 		return ByteBuffer.wrap(data);
 	}
 
 	public void putSlice(int idx) {
 		slices.set(idx, true);
+		loadingSlices.set(idx,false);
 	}
 
 	public void clearSlices() {
 		this.slices.clear();
+		this.loadingSlices.clear();
 	}
 
 	public int getNextSlice() {
-		int slice = slices.nextClearBit(0);
+		return getNextSlice(false);
+	}
 
+	public int getNextSlice(boolean repeats) {
+		int slice = slices.nextClearBit(0);
+		if (!repeats) {
+			while (loadingSlices.get(slice)) {
+				slice = slices.nextClearBit(slice+1);
+			}
+		}
 		// If we've gotten all the pieces, return -1
-		if (slice >= (size + (SLICE_SIZE) - 1)/(SLICE_SIZE)) // Ceiling(size/sliceSize)
+		if (slice >= maxSlices)
 			return -1;
 
+		loadingSlices.set(slice);
 		return slice;
+	}
+	public boolean isLoadingSlices() {
+		return !loadingSlices.isEmpty();
 	}
 }
