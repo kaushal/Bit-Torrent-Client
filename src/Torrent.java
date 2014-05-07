@@ -19,6 +19,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * @author kaushal
  */
 @SuppressWarnings("SpellCheckingInspection")
+
+//TODO: get rid of unnecessary print statements
 public class Torrent implements Runnable {
 
 	private TrackerConnection tracker;
@@ -312,8 +314,6 @@ public class Torrent implements Runnable {
 
 	private Piece choosePiece(Peer pr) {
 		// TODO: Implement rarest-piece algorithms...
-
-        System.out.println(pr + " Here");
         int[] pieceRanks = new int[pieces.size()];
 
         for(Piece piece : pieces) {
@@ -323,7 +323,6 @@ public class Torrent implements Runnable {
             else {
                 pieceRanks[piece.getIndex()] = -1;
             }
-            pieceRanks[piece.getIndex()] = -100;
         }
 
         for (Peer peer : peers.values()) {
@@ -331,7 +330,7 @@ public class Torrent implements Runnable {
                 if(peer.canGetPiece(piece.getIndex()) && pieceRanks[piece.getIndex()] != -1) {
                     pieceRanks[piece.getIndex()]++;
                 }
-             }
+            }
         }
 
         int leastPieceIndex = -1, leastPieceValue = -1;
