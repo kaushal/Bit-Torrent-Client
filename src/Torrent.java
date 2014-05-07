@@ -312,43 +312,42 @@ public class Torrent implements Runnable {
 	}
 
 	private Piece choosePiece(Peer pr) {
-		// TODO: Implement rarest-piece algorithms...
+		// TODO: Implement rarest-piece algorithms... and get rid of print statement
 
-//        System.out.println(pr + " Here");
-//        int[] pieceRanks = new int[pieces.size()];
-//
-//        for(Piece piece : pieces) {
-//            if (piece.getState() == Piece.PieceState.INCOMPLETE && pr.canGetPiece(piece.getIndex())) {
-//                pieceRanks[piece.getIndex()] = 0;
-//            }
-//            else {
-//                pieceRanks[piece.getIndex()] = -1;
-//            }
-//            pieceRanks[piece.getIndex()] = -100;
-//        }
-//
-//        for (Peer peer : peers.values()) {
-//            for (Piece piece : pieces) {
-//                if(peer.canGetPiece(piece.getIndex()) && pieceRanks[piece.getIndex()] != -1) {
-//                    pieceRanks[piece.getIndex()]++;
-//                }
-//            }
-//        }
-//
-//        int leastPieceIndex = -1, leastPieceValue = -1;
-//
-//        for (int i = 0; i < pieceRanks.length; i++) {
-//            if (leastPieceIndex == -1 && pieceRanks[i] != -1) {
-//                leastPieceIndex = i;
-//                leastPieceValue = pieceRanks[i];
-//            }
-//            else if (leastPieceValue != -1 && leastPieceValue > pieceRanks[i]) {
-//                leastPieceIndex = i;
-//                leastPieceValue = pieceRanks[i];
-//            }
-//        }
-//
-//        return pieces.get(leastPieceIndex);
+        System.out.println(pr + " Here");
+        int[] pieceRanks = new int[pieces.size()];
+
+        for(Piece piece : pieces) {
+            if (piece.getState() == Piece.PieceState.INCOMPLETE && pr.canGetPiece(piece.getIndex())) {
+                pieceRanks[piece.getIndex()] = 0;
+            }
+            else {
+                pieceRanks[piece.getIndex()] = -1;
+            }
+        }
+
+        for (Peer peer : peers.values()) {
+            for (Piece piece : pieces) {
+                if(peer.canGetPiece(piece.getIndex()) && pieceRanks[piece.getIndex()] != -1) {
+                    pieceRanks[piece.getIndex()]++;
+                }
+            }
+        }
+
+        int leastPieceIndex = -1, leastPieceValue = -1;
+
+        for (int i = 0; i < pieceRanks.length; i++) {
+            if (leastPieceIndex == -1 && pieceRanks[i] != -1) {
+                leastPieceIndex = i;
+                leastPieceValue = pieceRanks[i];
+            }
+            else if (leastPieceValue != -1 && leastPieceValue > pieceRanks[i]) {
+                leastPieceIndex = i;
+                leastPieceValue = pieceRanks[i];
+            }
+        }
+
+        return pieces.get(leastPieceIndex);
 
 
 		for (Piece pc : pieces) {
