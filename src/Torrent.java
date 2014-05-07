@@ -167,7 +167,15 @@ public class Torrent implements Runnable {
 				}
 				fileByteBuffer = null;
 			}
-			for (Peer pr: peers.values()) {
+            try {
+                // send stopped message
+                tracker.stop(peerId, port, uploaded, downloaded, left, encodedInfoHash);
+            } catch (IOException e) {
+                e.printStackTrace();
+            } catch (BencodingException e) {
+                e.printStackTrace();
+            }
+            for (Peer pr: peers.values()) { // shutdown all the peers
 				pr.getPeerConnection().shutdown();
 			}
 		}
