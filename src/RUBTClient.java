@@ -46,13 +46,10 @@ public class RUBTClient {
 		Torrent tt = new Torrent(ti, args[1]);
 		(new Thread(tt)).start();
 
-        //TODO: add graceful shutdown
-
-        Scanner sc = new Scanner(System.in);
-        System.out.println("Please input 'q' to quit");
-        if(sc.nextLine().equals("q")) {
-            tt.stop();
-        }
-
+		Scanner sc = new Scanner(System.in);
+		System.out.println("Please input 'q' to quit");
+		if (sc.nextLine().equals("q")) {
+			tt.stop();
+		}
 	}
 }
