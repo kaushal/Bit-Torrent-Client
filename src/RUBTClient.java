@@ -6,6 +6,7 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.Scanner;
 
 /**
  * Start of the program contains main method and spawns a new torrent object. 
@@ -44,5 +45,14 @@ public class RUBTClient {
 		TorrentInfo ti = new TorrentInfo(byteFile);
 		Torrent tt = new Torrent(ti, args[1]);
 		(new Thread(tt)).start();
+
+        //TODO: add graceful shutdown
+
+        Scanner sc = new Scanner(System.in);
+        System.out.println("Please input 'q' to quit");
+        if(sc.nextLine().equals("q")) {
+            tt.stop();
+        }
+
 	}
 }
