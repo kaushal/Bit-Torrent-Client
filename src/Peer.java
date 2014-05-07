@@ -1,7 +1,5 @@
-import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.BitSet;
-import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * A connection to a peer that is responsible for downloading
@@ -23,11 +21,13 @@ public class Peer {
 	public boolean choking = true;
 	public int outstandingRequests = 0;
 
+	private PeerConnection peerConnection;
 	private ByteBuffer peerId;
 	private BitSet availablePieces = new BitSet();
 
-	public Peer(ByteBuffer peerId) {
+	public Peer(ByteBuffer peerId, PeerConnection peerConnection) {
 		this.peerId = peerId.duplicate();
+		this.peerConnection = peerConnection;
 	}
 
 	public void setAvailablePieces(BitSet availablePieces) {
@@ -44,6 +44,10 @@ public class Peer {
 
 	public void setPieceAvailable(int index) {
 		this.availablePieces.set(index);
+	}
+
+	public PeerConnection getPeerConnection() {
+		return this.peerConnection;
 	}
 
 	/**
