@@ -47,10 +47,6 @@ public class RUBTClient {
 		(new Thread(tt)).start();
 
 		Scanner sc = new Scanner(System.in);
-//		System.out.println("Please input 'q' to quit");
-//		if (sc.nextLine().equals("q")) {
-//			tt.stop();
-//		}
         System.out.println("Please type 'q' to quit");
         while(true) {
             if (sc.nextLine().equals("q")) {
