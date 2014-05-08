@@ -17,6 +17,7 @@ public class Peer {
 	 */
 	public boolean handshook = false;
 	public boolean interested = false;
+	public boolean weHaveInterest = false;
 	public boolean choked = true;
 	public boolean choking = true;
 	public int outstandingRequests = 0;
