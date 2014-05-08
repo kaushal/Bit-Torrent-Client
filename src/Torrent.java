@@ -367,21 +367,19 @@ public class Torrent implements Runnable {
 	}
 
 	private Piece choosePiece(Peer pr) {
-		// TODO: Implement rarest-piece algorithms...
 		int[] pieceRanks = new int[pieces.size()];
 
 		for(Piece piece : pieces) {
 			if (piece.getState() == Piece.PieceState.INCOMPLETE && pr.canGetPiece(piece.getIndex())) {
 				pieceRanks[piece.getIndex()] = 0;
-			}
-			else {
+			} else {
 				pieceRanks[piece.getIndex()] = -1;
 			}
 		}
 
 		for (Peer peer : peers.values()) {
 			for (Piece piece : pieces) {
-				if(peer.canGetPiece(piece.getIndex()) && pieceRanks[piece.getIndex()] != -1) {
+				if (peer.canGetPiece(piece.getIndex()) && pieceRanks[piece.getIndex()] != -1) {
 					pieceRanks[piece.getIndex()]++;
 				}
 			}
@@ -399,11 +397,11 @@ public class Torrent implements Runnable {
 				leastPieceValue = pieceRanks[i];
 			}
 		}
-        System.out.println(leastPieceIndex + "-----" + pr.getAvailablePieces());
-        if (leastPieceIndex != -1)
-		    return pieces.get(leastPieceIndex);
-        else
-            return null;
+		if (leastPieceIndex == -1)
+			return null;
+
+		System.out.println("CHOICE: " + leastPieceIndex + " " + pr.canGetPiece(leastPieceIndex) + " " + pr.getAvailablePieces());
+		return pieces.get(leastPieceIndex);
 	}
 
 	/**
