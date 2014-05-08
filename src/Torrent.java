@@ -450,6 +450,7 @@ public class Torrent implements Runnable {
 		if (piecesHad.nextClearBit(0) == pieces.size() && !sentComplete) {
 			sentComplete = true;
 			try {
+				System.out.println("Download completed.");
 				tracker.complete(peerId, port, uploaded, downloaded, left, encodedInfoHash);
 			} catch (IOException e) {
 				e.printStackTrace();
