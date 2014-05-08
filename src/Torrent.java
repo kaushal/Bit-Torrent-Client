@@ -40,7 +40,6 @@ public class Torrent implements Runnable {
 	private boolean running = true;
 
 	private int port = 6881;
-    private Timer timer;
 
 	private int uploaded = 0;
 	private int downloaded = 0;
@@ -59,7 +58,6 @@ public class Torrent implements Runnable {
 		this.pieces = generatePieces();
 		this.left = ti.file_length;
 		this.tracker = new TrackerConnection(this.torrentInfo.announce_url);
-        this.timer = new Timer();
 		try {
 			dataFile = new RandomAccessFile(this.fileName, "rw");
 			fileByteBuffer = dataFile.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, (Integer)torrentInfo.info_map.get(TorrentInfo.KEY_LENGTH));
@@ -96,7 +94,6 @@ public class Torrent implements Runnable {
 			e.printStackTrace();
 		}
 	}
-
 	/**
 	 * Used by the RUBTClient to stop the torrent run loop
 	 */
@@ -137,12 +134,7 @@ public class Torrent implements Runnable {
 				minInterval = interval / 2;
 
 			lastAnnounce = System.currentTimeMillis();
-            timer.schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    //TODO: add function call here
-                }
-            }, 0, 3000);
+
 			while (running) {
 				if ((System.currentTimeMillis() - lastAnnounce) >= (minInterval - 5000)) {
 					tracker.announce(peerId, port, uploaded, downloaded, left, encodedInfoHash);
@@ -155,8 +147,6 @@ public class Torrent implements Runnable {
 				// At this point, all peers that are no longer busy (in a multi-part communication)
 				// are marked as not busy.  So, let's decide what we want each of them to do.
 				processFreePeers();
-
-
 
 				try {
 					Thread.sleep(500);
