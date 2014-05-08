@@ -45,7 +45,7 @@ public class TrackerConnection {
 	 * @throws BencodingException
 	 */
 	public HashMap<ByteBuffer,Object> start(String peerId, int port, int uploaded, int downloaded, int left, String infoHash) throws IOException, BencodingException {
-		return announce("started",peerId,port,uploaded,downloaded,left,infoHash);
+		return announce("started", peerId, port, uploaded, downloaded, left, infoHash);
 	}
 
 	/**
@@ -61,7 +61,7 @@ public class TrackerConnection {
 	 * @throws BencodingException
 	 */
 	public HashMap<ByteBuffer,Object> stop(String peerId, int port, int uploaded, int downloaded, int left, String infoHash) throws IOException, BencodingException {
-		return announce("stopped",peerId,port,uploaded,downloaded,left,infoHash);
+		return announce("stopped", peerId, port, uploaded, downloaded, left, infoHash);
 	}
 
 	/**
@@ -77,7 +77,7 @@ public class TrackerConnection {
 	 * @throws BencodingException
 	 */
 	public HashMap<ByteBuffer,Object> complete(String peerId, int port, int uploaded, int downloaded, int left, String infoHash) throws IOException, BencodingException {
-		return announce("completed",peerId,port,uploaded,downloaded,left,infoHash);
+		return announce("completed", peerId, port, uploaded, downloaded, left, infoHash);
 	}
 
 	/**
@@ -93,7 +93,7 @@ public class TrackerConnection {
 	 * @throws BencodingException
 	 */
 	public HashMap<ByteBuffer,Object> announce(String peerId, int port, int uploaded, int downloaded, int left, String infoHash) throws IOException, BencodingException {
-		return announce(null,peerId,port,uploaded,downloaded,left,infoHash);
+		return announce(null, peerId, port, uploaded, downloaded, left, infoHash);
 	}
 
 	@SuppressWarnings("unchecked")
