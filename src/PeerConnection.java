@@ -21,16 +21,16 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 public class PeerConnection implements Runnable {
 
 
-	public static final byte[] PROTOCOL_HEADER = new byte[]{'B', 'i', 't', 'T', 'o', 'r', 'r', 'e', 'n', 't', ' ', 'p', 'r', 'o', 't', 'o', 'c', 'o', 'l'};
-	private final byte[] KEEP_ALIVE = new byte[]{0, 0, 0, 0};
-	private final byte[] CHOKE = new byte[]{0, 0, 0, 1, 0};
-	private final byte[] UNCHOKE = new byte[]{0, 0, 0, 1, 1};
-	private final byte[] INTERESTED = new byte[]{0, 0, 0, 1, 2};
-	private final byte[] NOT_INTERESTED = new byte[]{0, 0, 0, 1, 3};
-	private final byte[] HAVE = new byte[]{0, 0, 0, 5, 4};
-	private final byte[] BITFIELD = new byte[]{0, 0, 0, 0, 5};
-	private final byte[] REQUEST = new byte[]{0, 0, 0, 13, 6};
-	private final byte[] PIECE = new byte[]{0, 0, 0, 0, 7};
+	public static final byte[] PROTOCOL_HEADER = new byte[]{'B','i','t','T','o','r','r','e','n','t',' ','p','r','o','t','o','c','o','l'};
+	private final byte[] KEEP_ALIVE = new byte[]{0,0,0,0};
+	private final byte[] CHOKE = new byte[]{0,0,0,1,0};
+	private final byte[] UNCHOKE = new byte[]{0,0,0,1,1};
+	private final byte[] INTERESTED = new byte[]{0,0,0,1,2};
+	private final byte[] NOT_INTERESTED = new byte[]{0,0,0,1,3};
+	private final byte[] HAVE = new byte[]{0,0,0,5,4};
+	private final byte[] BITFIELD = new byte[]{0,0,0,0,5};
+	private final byte[] REQUEST = new byte[]{0,0,0,13,6};
+	private final byte[] PIECE = new byte[]{0,0,0,0,7};
 
 	private Torrent torrent;
 	private Socket sock;
@@ -71,7 +71,7 @@ public class PeerConnection implements Runnable {
 	@Override
 	public void run() {
 		try {
-			sock = new Socket(ip, port);
+			sock = new Socket(ip,port);
 			OutputStream outputStream = sock.getOutputStream();
 			InputStream inputStream = sock.getInputStream();
 			int len;
@@ -157,7 +157,7 @@ public class PeerConnection implements Runnable {
 	 * @return A PeerMessage representing a handshake.
 	 */
 	private PeerMessage processHandshake(ByteBuffer msg) {
-		return PeerMessage.Handshake(peerId, msg);
+		return PeerMessage.Handshake(peerId,msg);
 	}
 
 	/**
@@ -180,7 +180,7 @@ public class PeerConnection implements Runnable {
 			case 3: // Not Interested
 				return PeerMessage.NotInterested(peerId);
 			case 4: // Have
-				return PeerMessage.Have(peerId, msg.getInt());
+				return PeerMessage.Have(peerId,msg.getInt());
 			case 5: // Bitfield
 				len -= 1;
 				BitSet pcs = new BitSet(len*8);
@@ -190,16 +190,16 @@ public class PeerConnection implements Runnable {
 					if (j % 8 == 0) b = msg.get();
 					pcs.set(j, ((b << (j % 8)) & 0x80) != 0);
 				}
-				return PeerMessage.Bitfield(peerId, pcs);
+				return PeerMessage.Bitfield(peerId,pcs);
 			case 6: // Request
 				int idx = msg.getInt();
 				int begin = msg.getInt();
 				int length = msg.getInt();
-				return PeerMessage.Request(peerId, idx, begin, length);
+				return PeerMessage.Request(peerId,idx,begin,length);
 			case 7: // Piece
 				idx = msg.getInt();
 				begin = msg.getInt();
-				return PeerMessage.Piece(peerId, idx, begin, (ByteBuffer) msg.compact().flip());
+				return PeerMessage.Piece(peerId,idx,begin, (ByteBuffer) msg.compact().flip());
 			default:
 				return null;
 		}
@@ -222,7 +222,7 @@ public class PeerConnection implements Runnable {
 				resetKeepAlive();
 			}
 		};
-		keepaliveTimer.schedule(tsk, 120000);
+		keepaliveTimer.schedule(tsk,120000);
 	}
 
 	/**
@@ -279,7 +279,7 @@ public class PeerConnection implements Runnable {
 	public boolean sendPiece(int index, int begin, int length, ByteBuffer pieceData) {
 		ByteBuffer bb = ByteBuffer.allocate(13+length);
 		bb.put(PIECE);
-		bb.putInt(0, 9+length);
+		bb.putInt(0,9+length);
 		bb.putInt(index);
 		bb.putInt(begin);
 		bb.put(pieceData.array(), begin, length);
@@ -329,7 +329,7 @@ public class PeerConnection implements Runnable {
 	public boolean sendBitfield(ByteBuffer bitfield) {
 		ByteBuffer bb = ByteBuffer.allocate(bitfield.limit()+5);
 		bb.put(BITFIELD);
-		bb.putInt(0, bitfield.limit() + 1);
+		bb.putInt(0,bitfield.limit() + 1);
 		bb.put(bitfield);
 		bb.flip();
 		return sendMessage(bb);

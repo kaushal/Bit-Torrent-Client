@@ -46,6 +46,7 @@ public class RUBTClient {
 		Torrent tt = new Torrent(ti, args[1]);
 		(new Thread(tt)).start();
 
+<<<<<<< HEAD
 		Scanner sc = new Scanner(System.in);
         while(true) {
             System.out.println("Please type 'q' to quit");
@@ -55,5 +56,15 @@ public class RUBTClient {
             }
             Thread.sleep(30000);
         }
+=======
+        //TODO: add graceful shutdown
+
+        Scanner sc = new Scanner(System.in);
+        System.out.println("Please input 'q' to quit");
+        if(sc.nextLine().equals("q")) {
+            tt.stop();
+        }
+
+>>>>>>> parent of 130225d... Fixing spacing stuff and removing TODOs that have already been done.
 	}
 }

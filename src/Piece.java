@@ -82,7 +82,7 @@ public class Piece {
 
 	public void putSlice(int idx) {
 		slices.set(idx, true);
-		loadingSlices.set(idx, false);
+		loadingSlices.set(idx,false);
 	}
 
 	public void clearSlices() {
