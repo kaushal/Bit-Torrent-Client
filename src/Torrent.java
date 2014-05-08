@@ -95,6 +95,7 @@ public class Torrent implements Runnable {
 		} catch (NoSuchAlgorithmException e) {
 			e.printStackTrace();
 		}
+
 	}
 	/**
 	 * Used by the RUBTClient to stop the torrent run loop
@@ -135,7 +136,9 @@ public class Torrent implements Runnable {
 			choked.choking = false;
 			choked.getPeerConnection().sendUnchoke();
 		}
-
+		if (left == 0) {
+			System.out.println("File is already complete.  Seeding.");
+		}
 	}
 	/**
 	 *
@@ -440,6 +443,7 @@ public class Torrent implements Runnable {
 					// Update stats
 					downloaded += piece.getSize();
 					left -= piece.getSize();
+					System.out.print("\r" + 100*downloaded / (downloaded+left) + "% complete            ");
 				} else {
 					piece.clearSlices();
 					piece.setState(Piece.PieceState.INCOMPLETE);
@@ -450,7 +454,6 @@ public class Torrent implements Runnable {
 		if (piecesHad.nextClearBit(0) == pieces.size() && !sentComplete) {
 			sentComplete = true;
 			try {
-				System.out.println("Download completed.");
 				tracker.complete(peerId, port, uploaded, downloaded, left, encodedInfoHash);
 			} catch (IOException e) {
 				e.printStackTrace();
