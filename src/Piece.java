@@ -1,5 +1,7 @@
 import java.nio.ByteBuffer;
 import java.util.BitSet;
+import java.util.Timer;
+import java.util.TimerTask;
 
 /**
  * A representation of a piece which is owned by a torrent
@@ -32,6 +34,8 @@ public class Piece {
 	private int maxSlices;
 	private byte[] data;
 	private PieceState state = PieceState.INCOMPLETE;
+	private Timer loadingTimer;
+	private TimerTask[] loadingTasks;
 
     /**
      *
@@ -49,6 +53,8 @@ public class Piece {
 		this.maxSlices = (size + (SLICE_SIZE) - 1)/(SLICE_SIZE); // Ceiling(size/sliceSize)
 		this.slices = new BitSet(maxSlices);
 		this.loadingSlices = new BitSet(maxSlices);
+		this.loadingTimer = new Timer("Piece " + this.index + " timer", true);
+		this.loadingTasks = new TimerTask[this.maxSlices];
 		slices.clear();
 	}
 
@@ -83,6 +89,7 @@ public class Piece {
 	public void putSlice(int idx) {
 		slices.set(idx, true);
 		loadingSlices.set(idx, false);
+		loadingTasks[idx].cancel();
 	}
 
 	public void clearSlices() {
@@ -106,6 +113,14 @@ public class Piece {
 			return -1;
 
 		loadingSlices.set(slice);
+		final int sl2 = slice;
+		loadingTasks[slice] = new TimerTask() {
+			@Override
+			public void run() {
+				loadingSlices.clear(sl2);
+			}
+		};
+		loadingTimer.schedule(loadingTasks[slice],30000);
 		return slice;
 	}
 	public boolean isLoadingSlices() {
