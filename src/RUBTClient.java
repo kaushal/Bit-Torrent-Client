@@ -19,7 +19,7 @@ import java.util.Scanner;
 public class RUBTClient {
 
 	@SuppressWarnings("unchecked")
-	public static void main(String[] args) throws IOException, BencodingException {
+	public static void main(String[] args) throws IOException, BencodingException, InterruptedException {
 
 		if (args.length != 2) {
 			System.out.println("incorrect number of command line arguments");
@@ -51,5 +51,14 @@ public class RUBTClient {
 		if (sc.nextLine().equals("q")) {
 			tt.stop();
 		}
+
+        while(true) {
+            System.out.println("Please type 'q' to quit");
+            if (sc.nextLine().equals("q")) {
+                tt.stop();
+                return;
+             }
+            Thread.sleep(30000);
+        }
 	}
 }
