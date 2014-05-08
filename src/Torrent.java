@@ -385,27 +385,16 @@ public class Torrent implements Runnable {
 	/**
 	 * Callback of sorts when peers die unexpectedly
 	 *
-	 * @param p
+	 * @param peerId Id of peer that died.
 	 */
-	/*
-	TODO: Fix peerDying
-	public void peerDying(Peer p) {
-		System.out.println("Peer " + p + " died. Sadface.");
-		synchronized (peerLock) {
-			if (freePeers.contains(p)) {
-				freePeers.remove(p);
-			} else if (busyPeers.values().contains(p)) {
-				for (Piece pc : busyPeers.keySet()) {
-					if (busyPeers.get(pc) == p) {
-						pc.clearSlices();
-						pc.setState(Piece.PieceState.INCOMPLETE);
-					}
-				}
-				busyPeers.values().remove(p);
-			}
-		}
+
+	public void peerDying(ByteBuffer peerId) {
+		System.out.println("Peer " + peerId + " died. Sadface.");
+		peers.get(peerId).handshook = false;
+		peers.get(peerId).choked = true;
+		peers.get(peerId).getPeerConnection().sendHandshake(this.torrentInfo.info_hash,ByteBuffer.wrap(this.peerId.getBytes()));
 	}
-*/
+
 
 	/**
 	 * Write the piece data to the piece buffer

@@ -90,7 +90,12 @@ public class PeerConnection implements Runnable {
 						outputStream.write(msg.array());
 					}
 				} catch (Exception e) {
-					e.printStackTrace();
+					messages.clear();
+					sock = new Socket(ip, port);
+					outputStream = sock.getOutputStream();
+					inputStream = sock.getInputStream();
+					writingBuffer.position(0);
+					this.torrent.peerDying(peerId);
 				}
 				if (inputStream.available() > 0) { // We have bytes to read...
 					byte[] tbuf = new byte[1024];
