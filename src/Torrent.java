@@ -368,49 +368,42 @@ public class Torrent implements Runnable {
 
 	private Piece choosePiece(Peer pr) {
 		// TODO: Implement rarest-piece algorithms...
-//		int[] pieceRanks = new int[pieces.size()];
-//
-//		for(Piece piece : pieces) {
-//			if (piece.getState() == Piece.PieceState.INCOMPLETE && pr.canGetPiece(piece.getIndex())) {
-//				pieceRanks[piece.getIndex()] = 0;
-//			}
-//			else {
-//				pieceRanks[piece.getIndex()] = -1;
-//			}
-//		}
-//
-//		for (Peer peer : peers.values()) {
-//			for (Piece piece : pieces) {
-//				if(peer.canGetPiece(piece.getIndex()) && pieceRanks[piece.getIndex()] != -1) {
-//					pieceRanks[piece.getIndex()]++;
-//				}
-//			}
-//		}
-//
-//		int leastPieceIndex = -1, leastPieceValue = -1;
-//
-//		for (int i = 0; i < pieceRanks.length; i++) {
-//			if (leastPieceIndex == -1 && pieceRanks[i] != -1) {
-//				leastPieceIndex = i;
-//				leastPieceValue = pieceRanks[i];
-//			}
-//			else if (leastPieceValue != -1 && leastPieceValue > pieceRanks[i]) {
-//				leastPieceIndex = i;
-//				leastPieceValue = pieceRanks[i];
-//			}
-//		}
-//
-//		return pieces.get(leastPieceIndex);
+		int[] pieceRanks = new int[pieces.size()];
 
-
-		for (Piece pc : pieces) {
-			if (pc.getState() == Piece.PieceState.INCOMPLETE && pr.canGetPiece(pc.getIndex())) {
-				return pc;
+		for(Piece piece : pieces) {
+			if (piece.getState() == Piece.PieceState.INCOMPLETE && pr.canGetPiece(piece.getIndex())) {
+				pieceRanks[piece.getIndex()] = 0;
+			}
+			else {
+				pieceRanks[piece.getIndex()] = -1;
 			}
 		}
-		System.out.println("Choose failed...");
-		return null;
 
+		for (Peer peer : peers.values()) {
+			for (Piece piece : pieces) {
+				if(peer.canGetPiece(piece.getIndex()) && pieceRanks[piece.getIndex()] != -1) {
+					pieceRanks[piece.getIndex()]++;
+				}
+			}
+		}
+
+		int leastPieceIndex = -1, leastPieceValue = -1;
+
+		for (int i = 0; i < pieceRanks.length; i++) {
+			if (leastPieceIndex == -1 && pieceRanks[i] != -1) {
+				leastPieceIndex = i;
+				leastPieceValue = pieceRanks[i];
+			}
+			else if (leastPieceValue != -1 && leastPieceValue > pieceRanks[i] && pieceRanks[i] != -1) {
+				leastPieceIndex = i;
+				leastPieceValue = pieceRanks[i];
+			}
+		}
+        System.out.println(leastPieceIndex + "-----" + pr.getAvailablePieces());
+        if (leastPieceIndex != -1)
+		    return pieces.get(leastPieceIndex);
+        else
+            return null;
 	}
 
 	/**
