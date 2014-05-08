@@ -45,7 +45,6 @@ public class Piece {
      */
 
 	public Piece(int index, int size, ByteBuffer hash) {
-		System.out.println(index + ":" + size);
 		this.hash = hash.array();
 		this.index = index;
 		this.size = size;

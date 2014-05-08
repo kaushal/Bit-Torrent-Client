@@ -295,7 +295,6 @@ public class PeerConnection implements Runnable {
 	 * @return whether or not the message was queued to be sent
 	 */
 	public boolean sendRequest(int index, int begin, int length) {
-		System.out.println("Request: " + index + " " + begin + " " + length);
 		ByteBuffer bb = ByteBuffer.allocate(17);
 		bb.put(REQUEST);
 		bb.putInt(index);
